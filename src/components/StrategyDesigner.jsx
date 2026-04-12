@@ -389,8 +389,8 @@ function StrategyDesigner() {
                                               dispatch({ type: 'MAP_OBJECT', objectId: instanceId, locationId: point ? state.locations.find(l => l.storagePoints.some(sp => sp.id === pointId)).id : (cloud ? cloud.id : 'memory'), storagePointId: pointId });
                                           }}>
                                               <option value="">-- โปรดเลือกจุดเก็บ --</option>
-                                              {state.locations.flatMap((loc, lIdx) => loc.storagePoints.map((p, pIdx) => <option key={p.id} value={p.id}>🏠 {loc.label} - {p.label.replace(/\(.*\)/, '').trim()} ({String.fromCharCode(65 + lIdx)}{pIdx + 1})</option>))}
-                                              {state.clouds.map((cloud, cIdx) => <option key={cloud.id} value={cloud.id}>☁️ {cloud.label} ({String.fromCharCode(65 + cIdx)})</option>)}
+                                              {state.locations.flatMap((loc, lIdx) => loc.storagePoints.map((p, pIdx) => <option key={p.id} value={p.id}>🏠 {loc.label} - {p.label.replace(/\(.*\)/, '').trim()} ({String.fromCharCode(65 + lIdx)}{pIdx + 1}){p.isLocked ? ' 🔒' : ''}</option>))}
+                                              {state.clouds.map((cloud, cIdx) => <option key={cloud.id} value={cloud.id}>☁️ {cloud.label} ({String.fromCharCode(65 + cIdx)}){cloud.isLocked ? ' 🔒' : ''}</option>)}
                                           </select>
                                           {i === 0 ? (
                                             <button className="add-copy-mini" onClick={() => dispatch({ type: 'ADD_OBJECT_COPY', logicalId: descriptorObj.id })}>+ เพิ่มสำเนา</button>

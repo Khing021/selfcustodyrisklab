@@ -556,9 +556,14 @@ function AnalysisSummary() {
                         const loc = state.locations.find(l => l.id === mapping?.locationId);
                         const cloud = state.clouds.find(c => c.id === mapping?.locationId);
                         const point = loc?.storagePoints.find(p => p.id === mapping?.storagePointId);
-                        const locationLabel = mapping?.locationId === 'memory' ? 'ความจำ' : (loc?.label || cloud?.label || 'ไม่ได้ระบุ');
-                        const pointLabel = point?.label || (cloud ? 'Cloud' : '--');
-                        const title = `พิกัดปัจจุบัน: ${locationLabel} (${pointLabel})`;
+                        let title = 'พิกัดปัจจุบัน: ไม่ได้ระบุ';
+                        if (mapping?.locationId === 'memory') {
+                            title = 'พิกัดปัจจุบัน: 🧠 ความจำ';
+                        } else if (loc && point) {
+                            title = `พิกัดปัจจุบัน: 🏠 ${loc.label} - ${point.label.replace(/\(.*\)/, '').trim()}${point.isLocked ? ' 🔒' : ''}`;
+                        } else if (cloud) {
+                            title = `พิกัดปัจจุบัน: ☁️ ${cloud.label}${cloud.isLocked ? ' 🔒' : ''}`;
+                        }
                         
                         return (
                             <>
@@ -580,9 +585,14 @@ function AnalysisSummary() {
                     const loc = state.locations.find(l => l.id === mapping?.locationId);
                     const cloud = state.clouds.find(c => c.id === mapping?.locationId);
                     const point = loc?.storagePoints.find(p => p.id === mapping?.storagePointId);
-                    const locationLabel = mapping?.locationId === 'memory' ? 'ความจำ' : (loc?.label || cloud?.label || 'ไม่ได้ระบุ');
-                    const pointLabel = point?.label || (cloud ? 'Cloud' : '--');
-                    const title = `พิกัดปัจจุบัน: ${locationLabel} (${pointLabel})`;
+                    let title = 'พิกัดปัจจุบัน: ไม่ได้ระบุ';
+                    if (mapping?.locationId === 'memory') {
+                        title = 'พิกัดปัจจุบัน: 🧠 ความจำ';
+                    } else if (loc && point) {
+                        title = `พิกัดปัจจุบัน: 🏠 ${loc.label} - ${point.label.replace(/\(.*\)/, '').trim()}${point.isLocked ? ' 🔒' : ''}`;
+                    } else if (cloud) {
+                        title = `พิกัดปัจจุบัน: ☁️ ${cloud.label}${cloud.isLocked ? ' 🔒' : ''}`;
+                    }
 
                     return (
                         <div key={inst.id} className="detail-row replica">
