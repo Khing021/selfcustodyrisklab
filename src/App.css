@@ -619,12 +619,7 @@ input:checked + .slider:before {
 }
 
 .method-container-v3::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0;
-    width: 4px; height: 100%;
-    background: var(--accent-gold);
-    opacity: 0.5;
+    display: none;
 }
 
 .method-container-v3.invalid-config {
@@ -1241,7 +1236,7 @@ input:checked + .slider:before {
 }
 
 .scenario-block {
-  border-left: 4px solid var(--accent-gold) !important;
+  /* Border removed as requested */
 }
 
 .scenario-intro {
