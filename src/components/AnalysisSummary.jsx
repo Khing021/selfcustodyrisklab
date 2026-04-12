@@ -109,7 +109,7 @@ function AnalysisSummary() {
   };
 
   const simulations = useMemo(() => {
-    const results = { compromise: [], disaster: [], forget: [] };
+    const results = { normal: [], compromise: [], disaster: [], forget: [] };
 
     const getSatisfactionChecker = (method) => (availableObjects) => {
         const satisfiedKeys = method.keySlots.filter(accId => {
@@ -133,8 +133,8 @@ function AnalysisSummary() {
     };
 
     state.locations.forEach(location => {
-      // --- COMPROMISE SIMULATION ---
-      const compromisedMethodStatuses = state.spendingMethods.map(method => {
+      {
+        const compromisedMethodStatuses = state.spendingMethods.map(method => {
         const checkSatisfied = getSatisfactionChecker(method);
         const stolenObjects = [];
         const compromisableObjects = [];
@@ -208,13 +208,26 @@ function AnalysisSummary() {
            return { ...obj, statusLabel, icon };
         });
 
-        return { methodLabel: method.label, isCompromised, isAtRisk, reason, details };
+        const canSpend = !userCannotRecoverBase;
+        return { methodLabel: method.label, isCompromised, isAtRisk, canSpend, reason, details };
       });
 
-      results.compromise.push({ location, statuses: compromisedMethodStatuses });
+      const isCompromised = compromisedMethodStatuses.some(s => s.isCompromised);
+      const isAtRisk = compromisedMethodStatuses.some(s => s.isAtRisk);
+      const workingMethods = compromisedMethodStatuses.filter(s => s.canSpend).map(s => s.methodLabel);
+      const isRecoverable = workingMethods.length > 0;
+
+      let outcome = 'safe';
+      if (isCompromised) outcome = 'critical';
+      else if (isAtRisk) outcome = 'warning';
+      else if (!isRecoverable) outcome = 'critical';
+
+        results.compromise.push({ location, statuses: compromisedMethodStatuses, outcome, workingMethods, isRecoverable });
+      }
 
       // --- DISASTER SIMULATION ---
-      const disasterMethodStatuses = state.spendingMethods.map(method => {
+      {
+        const disasterMethodStatuses = state.spendingMethods.map(method => {
         const checkSatisfied = getSatisfactionChecker(method);
         const remainingObjects = allObjects.filter(obj => {
           const mapping = state.objectMapping[obj.id];
@@ -254,7 +267,12 @@ function AnalysisSummary() {
         return { methodLabel: method.label, status, hasDescriptor: userHasDescriptor, hasAllSeeds, details };
       });
 
-      results.disaster.push({ location, statuses: disasterMethodStatuses });
+      const workingMethods = disasterMethodStatuses.filter(s => s.status !== 'critical').map(s => s.methodLabel);
+      const isRecoverable = workingMethods.length > 0;
+      const outcome = isRecoverable ? 'safe' : 'critical';
+
+        results.disaster.push({ location, statuses: disasterMethodStatuses, outcome, workingMethods, isRecoverable });
+      }
     });
 
     // --- FORGET / MEMORY LOST SIMULATIONS (C.1 - C.4) ---
@@ -336,15 +354,114 @@ function AnalysisSummary() {
         });
     };
 
-    results.forget = {
-        secrets: runForgetScenario('secrets'),
-        pin: runForgetScenario('pin'),
-        clouds: runForgetScenario('cloud'),
-        everything: runForgetScenario('everything')
+    const aggregateForget = (statuses) => {
+        const workingMethods = statuses.filter(s => s.status !== 'critical').map(s => s.methodLabel);
+        const isRecoverable = workingMethods.length > 0;
+        const outcome = isRecoverable ? 'safe' : 'critical';
+        return { statuses, outcome, workingMethods, isRecoverable };
     };
+
+    results.forget = {
+        secrets: aggregateForget(runForgetScenario('secrets')),
+        pin: aggregateForget(runForgetScenario('pin')),
+        clouds: aggregateForget(runForgetScenario('cloud')),
+        everything: aggregateForget(runForgetScenario('everything'))
+    };
+
+    // --- NORMAL SCENARIO SIMULATION (A) ---
+    const unencryptedCloudObjects = allObjects.filter(obj => {
+        const mapping = state.objectMapping[obj.id];
+        if (!mapping || !mapping.locationId.startsWith('Cloud-')) return false;
+        const cloud = (state.clouds || []).find(c => c.id === mapping.locationId);
+        return cloud && !cloud.isLocked;
+    });
+
+    const cloudObjects = allObjects.filter(obj => {
+        const mapping = state.objectMapping[obj.id];
+        return mapping && mapping.locationId.startsWith('Cloud-');
+    });
+
+    const normalMethodStatuses = state.spendingMethods.map(method => {
+        const checkSatisfied = getSatisfactionChecker(method);
+        const relevantObjects = getRelevantObjectsForMethod(method);
+        
+        // 1. DANGER: External party can spend now
+        const canExposedSpend = checkSatisfied(unencryptedCloudObjects);
+        
+        // 2. WARNING
+        const exposedDescriptor = unencryptedCloudObjects.some(o => o.type === 'descriptor');
+        const exposedSomeSecrets = unencryptedCloudObjects.some(o => ['mnemonic', 'seed', 'share', 'passphrase'].includes(o.type));
+        
+        const methodInvolvedLogicals = new Set(relevantObjects.map(o => o.logicalId));
+        const relevantCloudObjects = cloudObjects.filter(o => methodInvolvedLogicals.has(o.logicalId));
+        const allRelevantAreInCloud = relevantObjects.every(robj => 
+            relevantCloudObjects.some(cobj => cobj.logicalId === robj.logicalId)
+        );
+
+        let status = 'safe';
+        let reason = 'none';
+
+        if (canExposedSpend) {
+            status = 'critical';
+            reason = 'exposed-spend';
+        } else if (exposedDescriptor) {
+            status = 'warning';
+            reason = 'exposed-privacy';
+        } else if (exposedSomeSecrets) {
+            status = 'warning';
+            reason = 'exposed-partial';
+        } else if (allRelevantAreInCloud) {
+            status = 'warning';
+            reason = 'cloud-dependency';
+        }
+
+        // Details for drill-down (Normal condition: objects are at their assigned locations)
+        const details = relevantObjects.map(obj => {
+            const mapping = state.objectMapping[obj.id];
+            const isCloud = mapping?.locationId.startsWith('Cloud-');
+            const cloud = isCloud ? state.clouds.find(c => c.id === mapping.locationId) : null;
+            const isUnencrypted = isCloud && cloud && !cloud.isLocked;
+
+            let icon = '✅';
+            let statusLabel = '✅ พร้อมใช้งาน';
+            if (isUnencrypted) {
+                icon = '⚠️';
+                statusLabel = '⚠️ เปิดเผยบนคลาวด์ (ไม่ได้ Encrypt)';
+            } else if (isCloud) {
+                icon = '☁️';
+                statusLabel = '☁️ เก็บไว้บนคลาวด์ (Encrypted)';
+            }
+
+            return { ...obj, statusLabel, icon };
+        });
+
+        return { methodLabel: method.label, status, reason, details };
+    });
+
+    const normalOutcome = normalMethodStatuses.some(s => s.status === 'critical') ? 'critical' : 
+                          (normalMethodStatuses.some(s => s.status === 'warning') ? 'warning' : 'safe');
+    const normalWorkingMethods = normalMethodStatuses.filter(s => s.status !== 'critical').map(s => s.methodLabel);
+    
+    results.normal = { statuses: normalMethodStatuses, outcome: normalOutcome, workingMethods: normalWorkingMethods, isRecoverable: normalWorkingMethods.length > 0 };
 
     return results;
   }, [state, allObjects, hasDescriptorRequirement]);
+
+  const overallStatus = useMemo(() => {
+    const outcomes = [
+      simulations.normal.outcome,
+      ...simulations.compromise.map(s => s.outcome),
+      ...simulations.disaster.map(s => s.outcome),
+      simulations.forget.secrets.outcome,
+      simulations.forget.pin.outcome,
+      simulations.forget.clouds.outcome,
+      simulations.forget.everything.outcome
+    ];
+
+    if (outcomes.includes('critical')) return { label: 'วิกฤต (CRITICAL)', colorClass: 'critical-text' };
+    if (outcomes.includes('warning')) return { label: 'ควรระวัง (WARNING)', colorClass: 'warning-text' };
+    return { label: 'ปลอดภัยสูง (HIGH SECURITY)', colorClass: 'safe-text' };
+  }, [simulations]);
 
   if (!isConfigValid) {
     const isMissingDescriptor = configValidation.reason === 'missing-descriptor-storage';
@@ -447,19 +564,71 @@ function AnalysisSummary() {
       <header className="summary-header">
         <div className="risk-score">
             <span className="score-label">ภาพรวมความปลอดภัย:</span>
-            <span className="score-value accent-text">High Security</span>
+            <span className={`score-value accent-text ${overallStatus.colorClass}`}>{overallStatus.label}</span>
         </div>
       </header>
 
       <section className="simulation-zone">
-        <h3>A - หากถูกโจรกรรม/บุกรุก (Compromise Simulation)</h3>
+        <h3>A - สถานการณ์ปกติ (Normal Scenario)</h3>
+        <div className="sim-cards">
+            <div className={`glass-card sim-card single-full outcome-${simulations.normal.outcome}`}>
+              <div className="loc-title">✅ วิเคราะห์ความพร้อมของระบบ</div>
+              <div className={`outcome-badge ${simulations.normal.outcome}`}>
+                 {simulations.normal.outcome === 'safe' ? '✅ ปลอดภัย' : simulations.normal.outcome === 'warning' ? '⚠️ ควรระวัง' : '🚨 อันตราย'}
+              </div>
+              <div className="sim-results">
+                {simulations.normal.statuses.map((st, i) => {
+                  const itemId = `normal-A-${i}`;
+                  const isExpanded = expandedItems.has(itemId);
+                  return (
+                    <div 
+                      key={i} 
+                      className={`res-item res-expandable ${st.status === 'critical' ? 'critical' : st.status === 'warning' ? 'warning' : 'safe'} ${isExpanded ? 'expanded' : ''}`}
+                      onClick={() => toggleExpand(itemId)}
+                    >
+                      <div className="res-header">
+                          <strong>วอลเล็ต: {st.methodLabel}</strong>
+                          <span className="status-pill">
+                              {st.status === 'safe' ? '✅ ปลอดภัย' : st.status === 'warning' ? '⚠️ ควรระวัง' : '🚨 อันตราย'}
+                          </span>
+                      </div>
+                      <p className="res-desc">
+                          {st.status === 'critical' 
+                              ? 'ตรวจพบความเสี่ยงขั้นสูงสุด: ข้อมูลความลับของคุณรั่วไหลบนคลาวด์ในสถานะที่บุคคลภายนอกสามารถขโมยเงินออกไปได้ทันที'
+                              : st.status === 'warning'
+                              ? (st.reason === 'cloud-dependency' 
+                                  ? 'แม้จะเครื่องมือจะครบ แต่ระบบถูกตั้งไว้บนคลาวด์ทั้งหมด (แม้จะ Encrypted) ซึ่งถือว่ามีความเสี่ยงในระยะยาวหากระบบคลาวด์มีปัญหา'
+                                  : st.reason === 'exposed-privacy'
+                                  ? 'ความเป็นส่วนตัวรั่วไหล: Wallet Descriptor ถูกพบบนคลาวด์โดยไม่ได้เข้ารหัสไว้'
+                                  : 'ตรวจพบความเสี่ยง: กุญแจบางส่วนถูกพบบนคลาวด์โดยไม่ได้เข้ารหัสไว้ แม้จะโอนเงินไม่ได้ทันทีแต่ถือว่าข้อมูลรั่วไหลแล้ว')
+                              : 'ระบบของคุณถูกจัดเก็บไว้อย่างปลอดภัยและมิดชิด ความลับสำคัญไม่ได้อยู่นอกการควบคุมในสถานะที่เสี่ยงต่อการถูกเข้าถึง'}
+                      </p>
+                      {isExpanded && renderDetailedList(st.details)}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+        </div>
+      </section>
+
+      <section className="simulation-zone">
+        <h3>B - หากถูกโจรกรรม/บุกรุก (Compromise Simulation)</h3>
         <div className="sim-cards">
           {simulations.compromise.map((sim, idx) => (
-            <div key={idx} className="glass-card sim-card">
+            <div key={idx} className={`glass-card sim-card outcome-${sim.outcome}`}>
               <div className="loc-title">📍 {sim.location.label}</div>
+              <div className={`outcome-badge ${sim.outcome}`}>
+                 {sim.outcome === 'safe' ? '✅ ปลอดภัย' : sim.outcome === 'warning' ? '⚠️ มีความเสี่ยง' : '🚨 วิกฤต'}
+              </div>
+              {sim.workingMethods.length > 0 && (
+                <div className="card-working-methods">
+                  ยังคงเข้าถึงเงินได้ด้วยวิธี: {sim.workingMethods.join(', ')}
+                </div>
+              )}
               <div className="sim-results">
                 {sim.statuses.map((st, i) => {
-                  const itemId = `${sim.location.id}-A-${i}`;
+                  const itemId = `${sim.location.id}-B-${i}`;
                   const isExpanded = expandedItems.has(itemId);
                   return (
                     <div 
@@ -497,14 +666,22 @@ function AnalysisSummary() {
       </section>
 
       <section className="simulation-zone">
-        <h3>B - หากเกิดภัยพิบัติ (Disaster Simulation)</h3>
+        <h3>C - หากเกิดภัยพิบัติ (Disaster Simulation)</h3>
         <div className="sim-cards">
           {simulations.disaster.map((sim, idx) => (
-            <div key={idx} className="glass-card sim-card">
+            <div key={idx} className={`glass-card sim-card outcome-${sim.outcome}`}>
               <div className="loc-title">🔥 {sim.location.label}</div>
+              <div className={`outcome-badge ${sim.outcome}`}>
+                 {sim.outcome === 'safe' ? '✅ กู้คืนได้' : '🚨 สูญหายถาวร'}
+              </div>
+              {sim.workingMethods.length > 0 && (
+                <div className="card-working-methods">
+                  กู้คืนได้ด้วยวิธี: {sim.workingMethods.join(', ')}
+                </div>
+              )}
               <div className="sim-results">
                 {sim.statuses.map((st, i) => {
-                  const itemId = `${sim.location.id}-B-${i}`;
+                  const itemId = `${sim.location.id}-C-${i}`;
                   const isExpanded = expandedItems.has(itemId);
                   return (
                     <div 
@@ -536,20 +713,28 @@ function AnalysisSummary() {
       </section>
 
       <section className="simulation-zone">
-        <h3>C - หากลืม (Memory Lost Simulation)</h3>
+        <h3>D - หากลืม (Memory Lost Simulation)</h3>
         <div className="sim-cards-vertical">
           {[
-            { id: 'secrets', title: 'C.1 - หากลืมความลับ (Forget Secrets)', desc: 'ลืม Mnemonic หรือ Passphrase ทั้งหมดที่อยู่ในความจำ (ของที่จดไว้ยังคงอยู่)', data: simulations.forget.secrets },
-            { id: 'pin', title: 'C.2 - หากลืม PIN (Forget PIN)', desc: 'ลืมรหัส PIN ของ Hardware Wallet ทั้งหมด (ตัวเครื่องยังอยู่แต่เข้าถึงไม่ได้)', data: simulations.forget.pin },
-            { id: 'cloud', title: 'C.3 - หากลืม Cloud Password', desc: 'ลืมพาสเวิร์ดคลาวด์: คลาวด์ที่เข้ารหัสลับจะสูญเสียข้อมูล ส่วนที่ไม่เข้ารหัสลับยังกู้คืนสิทธิ์ได้', data: simulations.forget.clouds },
-            { id: 'everything', title: 'C.4 - ลืมทุกอย่าง (Total Memory Loss)', desc: 'สมมติว่าเกิดเหตุการณ์ในข้อ 1, 2 และ 3 พร้อมกันทั้งหมด', data: simulations.forget.everything }
+            { id: 'secrets', title: 'D.1 - หากลืมความลับ (Forget Secrets)', desc: 'ลืม Mnemonic หรือ Passphrase ทั้งหมดที่อยู่ในความจำ (ของที่จดไว้ยังคงอยู่)', data: simulations.forget.secrets },
+            { id: 'pin', title: 'D.2 - หากลืม PIN (Forget PIN)', desc: 'ลืมรหัส PIN ของ Hardware Wallet ทั้งหมด (ตัวเครื่องยังอยู่แต่เข้าถึงไม่ได้)', data: simulations.forget.pin },
+            { id: 'cloud', title: 'D.3 - หากลืม Cloud Password', desc: 'ลืมพาสเวิร์ดคลาวด์: คลาวด์ที่เข้ารหัสลับจะสูญเสียข้อมูล ส่วนที่ไม่เข้ารหัสลับยังกู้คืนสิทธิ์ได้', data: simulations.forget.clouds },
+            { id: 'everything', title: 'D.4 - ลืมทุกอย่าง (Total Memory Loss)', desc: 'สมมติว่าเกิดเหตุการณ์ในข้อ 1, 2 และ 3 พร้อมกันทั้งหมด', data: simulations.forget.everything }
           ].map(scenario => (
-            <div key={scenario.id} className="glass-card sim-card single-full scenario-block">
+            <div key={scenario.id} className={`glass-card sim-card single-full scenario-block outcome-${scenario.data.outcome}`}>
               <div className="loc-title">🧠 {scenario.title}</div>
+              <div className={`outcome-badge ${scenario.data.outcome}`}>
+                 {scenario.data.outcome === 'safe' ? '✅ กู้คืนได้' : '🚨 สูญหายถาวร'}
+              </div>
+              {scenario.data.workingMethods.length > 0 && (
+                 <div className="card-working-methods">
+                   กู้คืนได้ด้วยวิธี: {scenario.data.workingMethods.join(', ')}
+                 </div>
+              )}
               <p className="scenario-intro">{scenario.desc}</p>
               <div className="sim-results">
-                {scenario.data.map((st, i) => {
-                  const itemId = `memory-${scenario.id}-${i}`;
+                {scenario.data.statuses.map((st, i) => {
+                  const itemId = `memory-D-${scenario.id}-${i}`;
                   const isExpanded = expandedItems.has(itemId);
                   return (
                     <div 
