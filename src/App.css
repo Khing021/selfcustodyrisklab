@@ -1011,7 +1011,7 @@ input:checked + .slider:before {
 }
 .sim-cards {
    display: grid;
-   grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
+   grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
    gap: 20px;
 }
 .loc-title {
@@ -1025,6 +1025,7 @@ input:checked + .slider:before {
    display: flex;
    flex-direction: column;
    gap: 16px;
+   align-items: stretch;
 }
 .res-item {
    padding: 16px;
@@ -1062,3 +1063,141 @@ input:checked + .slider:before {
    border-left-color: var(--danger);
 }
 .res-item.critical .status-pill { color: var(--danger); }
+
+/* --- Wallet Descriptor Card --- */
+.descriptor-section {
+    margin: 32px 0;
+    padding: 0 40px;
+}
+
+.descriptor-card {
+    border: 1px dashed rgba(255, 215, 0, 0.3);
+    background: rgba(20, 20, 25, 0.4);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+.descriptor-header {
+    display: flex;
+    flex-direction: column;
+    padding: 20px 24px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(255, 215, 0, 0.02);
+}
+
+.descriptor-header .title-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 6px;
+}
+
+.descriptor-icon {
+    font-size: 20px;
+}
+
+.descriptor-header h4 {
+    margin: 0;
+    font-size: 16px;
+    color: var(--accent-gold);
+}
+
+.descriptor-info {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.descriptor-card .object-table-container-v3 {
+    padding: 12px;
+}
+
+/* --- Simulation Details Drilldown --- */
+.res-expandable {
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.res-expandable:hover {
+    filter: brightness(1.2);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.res-item.expanded {
+    filter: brightness(1.1);
+}
+
+.res-details-drilldown {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.detail-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.detail-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+}
+
+.detail-row.logical {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.detail-row.replica {
+    padding-left: 12px;
+    color: var(--text-secondary);
+}
+
+.det-icon {
+    width: 24px;
+    text-align: center;
+}
+
+.tree-branch {
+    color: var(--text-dim);
+    font-family: monospace;
+    font-weight: 400;
+}
+
+.det-name {
+    flex: 1;
+}
+
+.det-status {
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.det-status.safe { color: var(--success); }
+.det-status.warning { color: var(--warning); }
+.det-status.danger { color: var(--danger); }
+
+/* Animation */
+.animate-slide-down {
+    animation: slideDown 0.3s ease-out forwards;
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 1024px) {
+    .descriptor-section {
+        padding: 0 20px;
+    }
+}

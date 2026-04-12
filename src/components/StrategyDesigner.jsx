@@ -319,6 +319,127 @@ function StrategyDesigner() {
         })}
       </div>
       
+      {(() => {
+        const hasDescriptor = state.spendingMethods.length > 1 || 
+                             (state.spendingMethods.length === 1 && state.spendingMethods[0].type === 'multi-sig');
+        
+        if (!hasDescriptor) return null;
+
+        const descriptorObj = {
+          id: 'obj-wallet-descriptor',
+          name: 'Wallet Descriptor (Miniscript / Config File)',
+          type: 'descriptor',
+          isCopyable: true
+        };
+
+        const totalInstances = (state.replication[descriptorObj.id] || 0) + 1;
+
+        return (
+          <div className="descriptor-section animate-fade-in">
+             <div className="descriptor-card glass-card">
+                <header className="descriptor-header">
+                   <div className="title-group">
+                      <span className="descriptor-icon">📜</span>
+                      <h4>Wallet Descriptor</h4>
+                   </div>
+                   <div className="descriptor-info">
+                      สิ่งประดิษฐ์ที่บอกโครงสร้างของกระเป๋า จำเป็นสำหรับการกู้คืนหากใช้ Multisig หรือมีหลายบัญชี
+                   </div>
+                </header>
+                
+                <div className="object-table-container-v3">
+                   <table className="object-table-v3">
+                     <thead>
+                       <tr>
+                         <th>กุญแจสำคัญด้านโครงสร้าง</th>
+                         <th>สถานที่เก็บรักษา</th>
+                       </tr>
+                     </thead>
+                     <tbody>
+                        <tr className="object-row-primary-v3">
+                          <td><strong>{descriptorObj.name}</strong></td>
+                          <td>
+                            <div className="obj-actions-cell">
+                               {totalInstances === 1 && (
+                                  <select 
+                                      value={state.objectMapping[descriptorObj.id]?.storagePointId || ''}
+                                      onChange={(e) => {
+                                        const pointId = e.target.value;
+                                        const point = state.locations.flatMap(l => l.storagePoints).find(p => p.id === pointId);
+                                        dispatch({ 
+                                          type: 'MAP_OBJECT', 
+                                          objectId: descriptorObj.id, 
+                                          locationId: point ? state.locations.find(l => l.storagePoints.some(sp => sp.id === pointId)).id : 'memory',
+                                          storagePointId: pointId
+                                        });
+                                      }}
+                                    >
+                                      <option value="">-- โปรดเลือกจุดเก็บ --</option>
+                                      {state.locations.flatMap((loc, lIdx) => {
+                                        const locChar = String.fromCharCode(65 + lIdx);
+                                        return loc.storagePoints.map((p, pIdx) => (
+                                          <option key={p.id} value={p.id}>{loc.label} - {p.label.replace(/\(.*\)/, '').trim()} ({locChar}{pIdx + 1})</option>
+                                        ));
+                                      })}
+                                    </select>
+                               )}
+                               <button className="add-copy-mini" onClick={() => dispatch({ type: 'ADD_OBJECT_COPY', logicalId: descriptorObj.id })}>
+                                   + เพิ่มสำเนา
+                               </button>
+                            </div>
+                          </td>
+                        </tr>
+                        {totalInstances > 1 && Array.from({ length: totalInstances }).map((_, i) => {
+                           const copyIdx = i + 1;
+                           const instanceId = i === 0 ? descriptorObj.id : `${descriptorObj.id}-copy-${i}`;
+                           const mapping = state.objectMapping[instanceId] || { locationId: '', storagePointId: '' };
+                           return (
+                              <tr key={instanceId} className="object-row-replica-v3">
+                                  <td>
+                                      <div className="replica-label">
+                                          <span className="tree-branch">{copyIdx === totalInstances ? '└─' : '├─'}</span>
+                                          <span>สำเนา #{copyIdx}</span>
+                                      </div>
+                                  </td>
+                                  <td>
+                                      <div className="obj-actions-cell">
+                                          <select 
+                                              value={mapping.storagePointId}
+                                              onChange={(e) => {
+                                                  const pointId = e.target.value;
+                                                  const point = state.locations.flatMap(l => l.storagePoints).find(p => p.id === pointId);
+                                                  dispatch({ 
+                                                      type: 'MAP_OBJECT', 
+                                                      objectId: instanceId, 
+                                                      locationId: point ? state.locations.find(l => l.storagePoints.some(sp => sp.id === pointId)).id : 'memory',
+                                                      storagePointId: pointId
+                                                  });
+                                              }}
+                                          >
+                                              <option value="">-- โปรดเลือกจุดเก็บ --</option>
+                                              {state.locations.flatMap((loc, lIdx) => {
+                                                  const locChar = String.fromCharCode(65 + lIdx);
+                                                  return loc.storagePoints.map((p, pIdx) => (
+                                                      <option key={p.id} value={p.id}>{loc.label} - {p.label.replace(/\(.*\)/, '').trim()} ({locChar}{pIdx + 1})</option>
+                                                  ));
+                                              })}
+                                          </select>
+                                          <button className="icon-btn trash-btn mini-trash" title="ลบสำเนานี้" onClick={() => dispatch({ type: 'DELETE_OBJECT_COPY', logicalId: descriptorObj.id, copyIdx: i })}>
+                                              🗑️
+                                          </button>
+                                      </div>
+                                  </td>
+                              </tr>
+                           );
+                        })}
+                     </tbody>
+                   </table>
+                </div>
+             </div>
+          </div>
+        );
+      })()}
+      
       <div className="methods-footer">
           <button className="add-btn" onClick={() => dispatch({ type: 'ADD_SPENDING_METHOD' })}>
             <span className="add-icon">+</span>
