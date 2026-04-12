@@ -12,6 +12,7 @@ const initialState = {
       ]
     }
   ],
+  clouds: [],
   seeds: [
     {
       id: 'Seed-A',
@@ -38,6 +39,7 @@ const initialState = {
   replication: {},    // key: logicalObjectId, value: count of EXTRA copies
   nextIds: {
     location: 1,
+    cloud: 0,
     seed: 1,
     method: 2
   }
@@ -73,6 +75,41 @@ function reducer(state, action) {
           ...state,
           locations: state.locations.map(l => l.id === action.id ? { ...l, label: action.label } : l)
         };
+
+    case 'ADD_CLOUD': {
+      const char = String.fromCharCode(65 + state.nextIds.cloud);
+      const newCloud = {
+        id: `Cloud-${char}`,
+        label: `Cloud ${char}`,
+        isLocked: false // Defaults to Unencrypted
+      };
+      return {
+        ...state,
+        clouds: [...state.clouds, newCloud],
+        nextIds: { ...state.nextIds, cloud: state.nextIds.cloud + 1 }
+      };
+    }
+
+    case 'DELETE_CLOUD':
+      return {
+        ...state,
+        clouds: state.clouds.filter(c => c.id !== action.id),
+        objectMapping: Object.fromEntries(
+            Object.entries(state.objectMapping).filter(([objId, mapping]) => mapping.locationId !== action.id)
+        )
+      };
+
+    case 'UPDATE_CLOUD_LABEL':
+        return {
+          ...state,
+          clouds: state.clouds.map(c => c.id === action.id ? { ...c, label: action.label } : c)
+        };
+
+    case 'TOGGLE_CLOUD_LOCK':
+      return {
+        ...state,
+        clouds: state.clouds.map(c => c.id === action.id ? { ...c, isLocked: !c.isLocked } : c)
+      };
 
     case 'ADD_STORAGE_POINT': {
       const loc = state.locations.find(l => l.id === action.locationId);

@@ -148,6 +148,31 @@
   background: var(--bg-secondary);
 }
 
+.split-add-area {
+  display: flex;
+  gap: 16px;
+  grid-column: 1 / -1; /* Stretch across full width if in grid */
+}
+
+.split-add-area .add-btn {
+  flex: 1;
+}
+
+.location-card.type-cloud {
+  background: linear-gradient(135deg, rgba(30, 40, 60, 0.4) 0%, rgba(20, 20, 25, 0.4) 100%);
+  border-color: rgba(64, 150, 255, 0.2);
+}
+
+.location-card.type-cloud h4 {
+  color: #40a6ff;
+}
+
+.location-card.type-cloud .static-id {
+  background: rgba(64, 150, 255, 0.1);
+  color: #40a6ff;
+}
+
+
 .icon-btn {
     padding: 6px;
     border-radius: 4px;

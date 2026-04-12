@@ -54,7 +54,7 @@ function AnalysisSummary() {
     }
 
     return objects;
-  }, [state.seeds, state.replication, state.spendingMethods]);
+  }, [state.seeds, state.replication, state.spendingMethods, state.clouds]);
 
   const configValidation = useMemo(() => {
     const isMethodsValid = state.spendingMethods.every(m => m.keySlots.every(slot => !!slot));
@@ -151,6 +151,10 @@ function AnalysisSummary() {
             const isLocked = point && point.isLocked;
             if (isLocked || isHw) compromisableObjects.push(obj);
             else stolenObjects.push(obj);
+          } else if (mapping && mapping.locationId.startsWith('Cloud-')) {
+            const cloud = state.clouds.find(c => c.id === mapping.locationId);
+            if (cloud && !cloud.isLocked) stolenObjects.push(obj);
+            else if (cloud && cloud.isLocked) compromisableObjects.push(obj);
           }
         });
 
@@ -178,14 +182,28 @@ function AnalysisSummary() {
         const details = relevant.map(obj => {
            const isStolenNow = stolenObjects.some(s => s.id === obj.id);
            const isAtRiskHere = compromisableObjects.some(r => r.id === obj.id);
+           const mapping = state.objectMapping[obj.id];
+           const isCloud = mapping?.locationId.startsWith('Cloud-');
+           
            let statusLabel = '✅ ปลอดภัย (อยู่นอกพื้นที่)';
            let icon = '✅';
+
            if (isStolenNow) {
-              statusLabel = obj.type === 'hw-wallet' ? '⚠️ ตกอยู่ในมือโจร (ถูกปกป้องด้วย PIN)' : '🚨 ตกอยู่ในมือโจร';
-              icon = isStolenNow && obj.type === 'hw-wallet' ? '⚠️' : '🚨';
+              if (isCloud) {
+                statusLabel = '🚨 เข้าถึงได้โดยแฮ็กเกอร์หรือผู้ให้บริการคลาวด์';
+                icon = '🚨';
+              } else {
+                statusLabel = obj.type === 'hw-wallet' ? '⚠️ ตกอยู่ในมือโจร (ถูกปกป้องด้วย PIN)' : '🚨 ตกอยู่ในมือโจร';
+                icon = isStolenNow && obj.type === 'hw-wallet' ? '⚠️' : '🚨';
+              }
            } else if (isAtRiskHere) {
-              statusLabel = '⚠️ เสี่ยงถูกแกะรหัส (อยู่ในจุดที่โจรบุกถึง)';
-              icon = '⚠️';
+              if (isCloud) {
+                statusLabel = '⚠️ เสี่ยงถูกแกะรหัส (อยู่ในที่ที่แฮ็กเกอร์อาจบุกถึง)';
+                icon = '⚠️';
+              } else {
+                statusLabel = '⚠️ เสี่ยงถูกแกะรหัส (อยู่ในจุดที่โจรบุกถึง)';
+                icon = '⚠️';
+              }
            }
            return { ...obj, statusLabel, icon };
         });
@@ -277,7 +295,22 @@ function AnalysisSummary() {
             return { ...obj, statusLabel, icon };
         });
 
-        return { methodLabel: method.label, status, details };
+        // Cloud password sub-segment
+        const cloudPasswordResults = state.clouds.map(cloud => {
+            const usesThisCloud = allObjects.some(o => state.objectMapping[o.id]?.locationId === cloud.id);
+            if (!usesThisCloud) return null;
+            return {
+                label: cloud.label,
+                id: cloud.id,
+                isSafe: !cloud.isLocked,
+                statusLabel: cloud.isLocked ? '🚨 ไม่สามารถเข้าถึงข้อมูลได้ถาวร' : '✅ สามารถกู้คืนข้อมูลคลาวด์ได้',
+                desc: cloud.isLocked 
+                    ? 'เนื่องจากคลาวด์มีการเข้ารหัสและคุณลืมรหัสผ่าน ผู้ให้บริการไม่สามารถช่วยกู้คืนข้อมูลได้'
+                    : 'คลาวด์ไม่มีการเข้ารหัส คุณสามารถกู้คืนสิทธิ์การเข้าถึงผ่านอีเมลหรือผู้ให้บริการได้'
+            };
+        }).filter(c => !!c);
+
+        return { methodLabel: method.label, status, details, cloudPasswordResults };
     });
 
     return results;
@@ -329,9 +362,10 @@ function AnalysisSummary() {
                         const inst = group.instances[0];
                         const mapping = state.objectMapping[inst.id];
                         const loc = state.locations.find(l => l.id === mapping?.locationId);
+                        const cloud = state.clouds.find(c => c.id === mapping?.locationId);
                         const point = loc?.storagePoints.find(p => p.id === mapping?.storagePointId);
-                        const locationLabel = mapping?.locationId === 'memory' ? 'ความจำ' : (loc?.label || 'ไม่ได้ระบุ');
-                        const pointLabel = point?.label || '--';
+                        const locationLabel = mapping?.locationId === 'memory' ? 'ความจำ' : (loc?.label || cloud?.label || 'ไม่ได้ระบุ');
+                        const pointLabel = point?.label || (cloud ? 'Cloud' : '--');
                         const title = `พิกัดปัจจุบัน: ${locationLabel} (${pointLabel})`;
                         
                         return (
@@ -352,9 +386,10 @@ function AnalysisSummary() {
                 {isComplex && group.instances.map((inst, idx) => {
                     const mapping = state.objectMapping[inst.id];
                     const loc = state.locations.find(l => l.id === mapping?.locationId);
+                    const cloud = state.clouds.find(c => c.id === mapping?.locationId);
                     const point = loc?.storagePoints.find(p => p.id === mapping?.storagePointId);
-                    const locationLabel = mapping?.locationId === 'memory' ? 'ความจำ' : (loc?.label || 'ไม่ได้ระบุ');
-                    const pointLabel = point?.label || '--';
+                    const locationLabel = mapping?.locationId === 'memory' ? 'ความจำ' : (loc?.label || cloud?.label || 'ไม่ได้ระบุ');
+                    const pointLabel = point?.label || (cloud ? 'Cloud' : '--');
                     const title = `พิกัดปัจจุบัน: ${locationLabel} (${pointLabel})`;
 
                     return (
@@ -480,26 +515,41 @@ function AnalysisSummary() {
                   const itemId = `memory-C-${i}`;
                   const isExpanded = expandedItems.has(itemId);
                   return (
-                    <div 
-                      key={i} 
-                      className={`res-item res-expandable ${st.status} ${isExpanded ? 'expanded' : ''}`}
-                      onClick={() => toggleExpand(itemId)}
-                    >
-                      <div className="res-header">
-                          <strong>วอลเล็ต: {st.methodLabel}</strong>
-                          <span className="status-pill">
-                              {st.status === 'safe' ? '✅ ปลอดภัย' : st.status === 'warning' ? '⚠️ คำเตือน' : '🚨 เงินสูญหายถาวร'}
-                          </span>
+                    <React.Fragment key={i}>
+                      <div 
+                        className={`res-item res-expandable ${st.status} ${isExpanded ? 'expanded' : ''}`}
+                        onClick={() => toggleExpand(itemId)}
+                      >
+                        <div className="res-header">
+                            <strong>วอลเล็ต: {st.methodLabel}</strong>
+                            <span className="status-pill">
+                                {st.status === 'safe' ? '✅ ปลอดภัย' : st.status === 'warning' ? '⚠️ คำเตือน' : '🚨 เงินสูญหายถาวร'}
+                            </span>
+                        </div>
+                        <p className="res-desc">
+                            {st.status === 'safe' 
+                                ? `หากคุณลืมข้อมูลทั้งหมดที่อยู่ในความจำ คุณยังสามารถกู้คืนเงินได้จากสำเนาทางกายภาพที่เก็บไว้ตามสถานที่ต่างๆ`
+                                : st.status === 'warning'
+                                ? `คุณลืมตำแหน่งหรือข้อมูล Wallet Descriptor แต่ยังคงมีกุญแจกายภาพครบทุกชุดสำหรับการสร้างใหม่`
+                                : `คำเตือน! หากคุณลืมข้อมูลในความจำ คุณจะไม่สามารถกู้คืนกุญแจที่จำเป็นได้อีกต่อไป เพราะไม่มีการจดบันทึกลงบนวัตถุทางกายภาพชุดอื่นไว้เลย`}
+                        </p>
+                        {isExpanded && renderDetailedList(st.details)}
                       </div>
-                      <p className="res-desc">
-                          {st.status === 'safe' 
-                              ? `หากคุณลืมข้อมูลทั้งหมดที่อยู่ในความจำ คุณยังสามารถกู้คืนเงินได้จากสำเนาทางกายภาพที่เก็บไว้ตามสถานที่ต่างๆ`
-                              : st.status === 'warning'
-                              ? `คุณลืมตำแหน่งหรือข้อมูล Wallet Descriptor แต่ยังคงมีกุญแจกายภาพครบทุกชุดสำหรับการสร้างใหม่`
-                              : `คำเตือน! หากคุณลืมข้อมูลในความจำ คุณจะไม่สามารถกู้คืนกุญแจที่จำเป็นได้อีกต่อไป เพราะไม่มีการจดบันทึกลงบนวัตถุทางกายภาพชุดอื่นไว้เลย`}
-                      </p>
-                      {isExpanded && renderDetailedList(st.details)}
-                    </div>
+
+                      {st.cloudPasswordResults && st.cloudPasswordResults.length > 0 && (
+                          <div className="cloud-password-summary" style={{ marginTop: '16px' }}>
+                             {st.cloudPasswordResults.map(cloud => (
+                                <div key={cloud.id} className={`res-item ${cloud.isSafe ? 'safe' : 'critical'}`} style={{ borderStyle: 'dashed', opacity: 0.9 }}>
+                                   <div className="res-header">
+                                      <strong>🧠 คลาวด์พาสเวิร์ด: {cloud.label}</strong>
+                                      <span className="status-pill">{cloud.statusLabel}</span>
+                                   </div>
+                                   <p className="res-desc">{cloud.desc}</p>
+                                </div>
+                             ))}
+                          </div>
+                      )}
+                    </React.Fragment>
                   );
                 })}
               </div>

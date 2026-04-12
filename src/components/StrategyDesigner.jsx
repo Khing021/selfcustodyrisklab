@@ -235,16 +235,17 @@ function StrategyDesigner() {
                                                 onChange={(e) => {
                                                   const pointId = e.target.value;
                                                   const point = state.locations.flatMap(l => l.storagePoints).find(p => p.id === pointId);
+                                                  const cloud = state.clouds.find(c => c.id === pointId);
                                                   dispatch({ 
                                                     type: 'MAP_OBJECT', 
                                                     objectId: obj.id, 
-                                                    locationId: point ? state.locations.find(l => l.storagePoints.some(sp => sp.id === pointId)).id : 'memory',
+                                                    locationId: point ? state.locations.find(l => l.storagePoints.some(sp => sp.id === pointId)).id : (cloud ? cloud.id : 'memory'),
                                                     storagePointId: pointId
                                                   });
                                                 }}
                                               >
                                                 <option value="">
-                                                    {obj.type === 'hw-wallet' ? '-- (ไม่มี) --' : '-- (ความจำ) --'}
+                                                  {obj.type === 'hw-wallet' ? '-- ไม่ใช้ --' : '-- ไม่บันทึก (จำ) --'}
                                                 </option>
                                                 {state.locations.flatMap((loc, lIdx) => {
                                                   const locChar = String.fromCharCode(65 + lIdx);
@@ -252,6 +253,18 @@ function StrategyDesigner() {
                                                     <option key={p.id} value={p.id}>{loc.label} - {p.label.replace(/\(.*\)/, '').trim()} ({locChar}{pIdx + 1})</option>
                                                   ));
                                                 })}
+                                                {state.clouds.length > 0 && obj.type !== 'hw-wallet' && (
+                                                  <>
+                                                    <optgroup label="Cloud Storage">
+                                                      {state.clouds.map((cloud, cIdx) => {
+                                                        const cloudChar = String.fromCharCode(65 + cIdx);
+                                                        return (
+                                                          <option key={cloud.id} value={cloud.id}>{cloud.label} ({cloudChar})</option>
+                                                        );
+                                                      })}
+                                                    </optgroup>
+                                                  </>
+                                                )}
                                               </select>
                                          )}
                                          {obj.isCopyable && (
@@ -281,21 +294,32 @@ function StrategyDesigner() {
                                                         onChange={(e) => {
                                                             const pointId = e.target.value;
                                                             const point = state.locations.flatMap(l => l.storagePoints).find(p => p.id === pointId);
+                                                            const cloud = state.clouds.find(c => c.id === pointId);
                                                             dispatch({ 
                                                                 type: 'MAP_OBJECT', 
                                                                 objectId: instanceId, 
-                                                                locationId: point ? state.locations.find(l => l.storagePoints.some(sp => sp.id === pointId)).id : 'memory',
+                                                                locationId: point ? state.locations.find(l => l.storagePoints.some(sp => sp.id === pointId)).id : (cloud ? cloud.id : 'memory'),
                                                                 storagePointId: pointId
                                                             });
                                                         }}
                                                     >
-                                                        <option value="">-- ไม่บันทึก (ความจำ) --</option>
+                                                        <option value="">-- ไม่บันทึก (จำ) --</option>
                                                         {state.locations.flatMap((loc, lIdx) => {
                                                             const locChar = String.fromCharCode(65 + lIdx);
                                                             return loc.storagePoints.map((p, pIdx) => (
                                                                 <option key={p.id} value={p.id}>{loc.label} - {p.label.replace(/\(.*\)/, '').trim()} ({locChar}{pIdx + 1})</option>
                                                             ));
                                                         })}
+                                                        {state.clouds.length > 0 && obj.type !== 'hw-wallet' && (
+                                                            <optgroup label="Cloud Storage">
+                                                                {state.clouds.map((cloud, cIdx) => {
+                                                                    const cloudChar = String.fromCharCode(65 + cIdx);
+                                                                    return (
+                                                                        <option key={cloud.id} value={cloud.id}>{cloud.label} ({cloudChar})</option>
+                                                                    );
+                                                                })}
+                                                            </optgroup>
+                                                        )}
                                                     </select>
                                                     <button className="icon-btn trash-btn mini-trash" title="ลบสำเนานี้" onClick={() => dispatch({ type: 'DELETE_OBJECT_COPY', logicalId: obj.id, copyIdx: i })}>
                                                         🗑️
@@ -372,10 +396,11 @@ function StrategyDesigner() {
                                       onChange={(e) => {
                                         const pointId = e.target.value;
                                         const point = state.locations.flatMap(l => l.storagePoints).find(p => p.id === pointId);
+                                        const cloud = state.clouds.find(c => c.id === pointId);
                                         dispatch({ 
                                           type: 'MAP_OBJECT', 
                                           objectId: descriptorObj.id, 
-                                          locationId: point ? state.locations.find(l => l.storagePoints.some(sp => sp.id === pointId)).id : 'memory',
+                                          locationId: point ? state.locations.find(l => l.storagePoints.some(sp => sp.id === pointId)).id : (cloud ? cloud.id : 'memory'),
                                           storagePointId: pointId
                                         });
                                       }}
@@ -387,6 +412,16 @@ function StrategyDesigner() {
                                           <option key={p.id} value={p.id}>{loc.label} - {p.label.replace(/\(.*\)/, '').trim()} ({locChar}{pIdx + 1})</option>
                                         ));
                                       })}
+                                      {state.clouds.length > 0 && (
+                                          <optgroup label="Cloud Storage">
+                                              {state.clouds.map((cloud, cIdx) => {
+                                                  const cloudChar = String.fromCharCode(65 + cIdx);
+                                                  return (
+                                                      <option key={cloud.id} value={cloud.id}>{cloud.label} ({cloudChar})</option>
+                                                  );
+                                              })}
+                                          </optgroup>
+                                      )}
                                     </select>
                                )}
                                <button className="add-copy-mini" onClick={() => dispatch({ type: 'ADD_OBJECT_COPY', logicalId: descriptorObj.id })}>
@@ -414,10 +449,11 @@ function StrategyDesigner() {
                                               onChange={(e) => {
                                                   const pointId = e.target.value;
                                                   const point = state.locations.flatMap(l => l.storagePoints).find(p => p.id === pointId);
+                                                  const cloud = state.clouds.find(c => c.id === pointId);
                                                   dispatch({ 
                                                       type: 'MAP_OBJECT', 
                                                       objectId: instanceId, 
-                                                      locationId: point ? state.locations.find(l => l.storagePoints.some(sp => sp.id === pointId)).id : 'memory',
+                                                      locationId: point ? state.locations.find(l => l.storagePoints.some(sp => sp.id === pointId)).id : (cloud ? cloud.id : 'memory'),
                                                       storagePointId: pointId
                                                   });
                                               }}
@@ -429,6 +465,16 @@ function StrategyDesigner() {
                                                       <option key={p.id} value={p.id}>{loc.label} - {p.label.replace(/\(.*\)/, '').trim()} ({locChar}{pIdx + 1})</option>
                                                   ));
                                               })}
+                                              {state.clouds.length > 0 && (
+                                                  <optgroup label="Cloud Storage">
+                                                      {state.clouds.map((cloud, cIdx) => {
+                                                          const cloudChar = String.fromCharCode(65 + cIdx);
+                                                          return (
+                                                              <option key={cloud.id} value={cloud.id}>{cloud.label} ({cloudChar})</option>
+                                                          );
+                                                      })}
+                                                  </optgroup>
+                                              )}
                                           </select>
                                           <button className="icon-btn trash-btn mini-trash" title="ลบสำเนานี้" onClick={() => dispatch({ type: 'DELETE_OBJECT_COPY', logicalId: descriptorObj.id, copyIdx: i })}>
                                               🗑️
