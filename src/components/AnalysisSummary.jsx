@@ -105,7 +105,13 @@ function AnalysisSummary() {
     });
     if (hasDescriptorRequirement) logicalIds.add('obj-wallet-descriptor');
     
-    return allObjects.filter(obj => logicalIds.has(obj.logicalId));
+    // FIX: Only return objects that have an active mapping (not "-- ไม่ใช้ --")
+    return allObjects.filter(obj => {
+       const mapping = state.objectMapping[obj.id];
+       if (!mapping) return false;
+       if (mapping.locationId === 'memory') return true;
+       return !!mapping.storagePointId;
+    }).filter(obj => logicalIds.has(obj.logicalId));
   };
 
   const simulations = useMemo(() => {
@@ -140,7 +146,9 @@ function AnalysisSummary() {
         const compromisableObjects = [];
         const externalObjects = allObjects.filter(obj => {
             const mapping = state.objectMapping[obj.id];
-            return !mapping || mapping.locationId !== location.id;
+            // FIX: Only include objects that are MAPPED and not in this location
+            if (!mapping || !mapping.locationId) return false;
+            return mapping.locationId !== location.id;
         });
         
         allObjects.forEach(obj => {
@@ -158,24 +166,34 @@ function AnalysisSummary() {
           }
         });
 
-        const thiefCanSpendNow = checkSatisfied(stolenObjects);
+        const relevantObjects = getRelevantObjectsForMethod(method);
+        const methodInvolvedLogicals = new Set(relevantObjects.map(o => o.logicalId));
+
+        const methodStolen = stolenObjects.filter(o => methodInvolvedLogicals.has(o.logicalId));
+        const methodCompromisable = compromisableObjects.filter(o => methodInvolvedLogicals.has(o.logicalId));
+
+        const thiefCanSpendNow = checkSatisfied(methodStolen);
+        
         const userCannotRecoverBase = !checkSatisfied(externalObjects);
-        const isCompromised = thiefCanSpendNow || (stolenObjects.length > 0 && userCannotRecoverBase);
+        const thiefStoleRelevantPhysical = methodStolen.some(o => state.objectMapping[o.id]?.locationId === location.id);
+        const userPermanentlyLostFunds = thiefStoleRelevantPhysical && !checkSatisfied([...externalObjects, ...methodCompromisable]);
+
+        const isCompromised = thiefCanSpendNow || userPermanentlyLostFunds;
 
         const thiefHasDescriptor = hasDescriptorRequirement && 
-                                   [...stolenObjects, ...compromisableObjects].some(o => o.type === 'descriptor');
+                                   [...methodStolen, ...methodCompromisable].some(o => o.type === 'descriptor');
 
-        const thiefCouldSpendIfCrack = !isCompromised && checkSatisfied([...stolenObjects, ...compromisableObjects]);
-        const userNeedsLockedToSurvive = !isCompromised && userCannotRecoverBase && checkSatisfied([...externalObjects, ...compromisableObjects]);
+        const thiefCouldSpendIfCrack = !isCompromised && checkSatisfied([...methodStolen, ...methodCompromisable]);
+        const userNeedsLockedToSurvive = !isCompromised && userCannotRecoverBase && checkSatisfied([...externalObjects, ...methodCompromisable]);
         
         let isAtRisk = thiefCouldSpendIfCrack || userNeedsLockedToSurvive || thiefHasDescriptor;
 
         let reason = 'none';
         if (thiefCanSpendNow) reason = 'thief-spend';
-        else if (isCompromised && userCannotRecoverBase) reason = 'user-loss';
-        else if (thiefHasDescriptor) reason = 'privacy-loss';
+        else if (userPermanentlyLostFunds) reason = 'user-loss';
         else if (thiefCouldSpendIfCrack) reason = 'crack-risk';
         else if (userNeedsLockedToSurvive) reason = 'lock-survival';
+        else if (thiefHasDescriptor) reason = 'privacy-loss';
 
         // Attach details for DRILL-DOWN
         const relevant = getRelevantObjectsForMethod(method);
@@ -208,7 +226,7 @@ function AnalysisSummary() {
            return { ...obj, statusLabel, icon };
         });
 
-        const canSpend = !userCannotRecoverBase;
+        const canSpend = !isCompromised;
         return { methodLabel: method.label, isCompromised, isAtRisk, canSpend, reason, details };
       });
 
@@ -231,7 +249,9 @@ function AnalysisSummary() {
         const checkSatisfied = getSatisfactionChecker(method);
         const remainingObjects = allObjects.filter(obj => {
           const mapping = state.objectMapping[obj.id];
-          return !mapping || mapping.locationId !== location.id;
+          // FIX: Only include objects that are MAPPED and not in this location
+          if (!mapping || !mapping.locationId) return false;
+          return mapping.locationId !== location.id;
         });
 
         const userHasDescriptor = !hasDescriptorRequirement || remainingObjects.some(o => o.type === 'descriptor');
@@ -267,9 +287,13 @@ function AnalysisSummary() {
         return { methodLabel: method.label, status, hasDescriptor: userHasDescriptor, hasAllSeeds, details };
       });
 
-      const workingMethods = disasterMethodStatuses.filter(s => s.status !== 'critical').map(s => s.methodLabel);
-      const isRecoverable = workingMethods.length > 0;
-      const outcome = isRecoverable ? 'safe' : 'critical';
+        const workingMethods = disasterMethodStatuses.filter(s => s.status !== 'critical').map(s => s.methodLabel);
+        const isRecoverable = workingMethods.length > 0;
+        
+        // FIX: Outcome is safe only if at least one method is safe. If all working are warning, outcome is warning.
+        const hasSafe = disasterMethodStatuses.some(s => s.status === 'safe');
+        const hasWarning = disasterMethodStatuses.some(s => s.status === 'warning');
+        const outcome = hasSafe ? 'safe' : (hasWarning ? 'warning' : 'critical');
 
         results.disaster.push({ location, statuses: disasterMethodStatuses, outcome, workingMethods, isRecoverable });
       }
@@ -281,21 +305,22 @@ function AnalysisSummary() {
             const checkSatisfied = getSatisfactionChecker(method);
             const availableObjects = allObjects.filter(obj => {
                 const mapping = state.objectMapping[obj.id];
-                if (!mapping) return true; // Unassigned objects are implicitly available if not in memory? 
-                // Wait, if unassigned, it's not even a thing. But let's follow the filter.
+                // FIX: Only include objects that are MAPPED
+                if (!mapping || !mapping.locationId) return false;
                 
                 const isInMemory = mapping.locationId === 'memory';
                 const isCloud = mapping.locationId.startsWith('Cloud-');
                 
                 // Scenario Logic
                 if (typeFilter === 'secrets' && isInMemory && (obj.type === 'mnemonic' || obj.type === 'share' || obj.type === 'passphrase')) return false;
-                if (typeFilter === 'pin' && isInMemory && obj.type === 'hw-wallet') return false;
+                if (typeFilter === 'pin' && obj.type === 'hw-wallet') return false;
                 if (typeFilter === 'cloud' && isCloud) {
                     const cloud = (state.clouds || []).find(c => c.id === mapping.locationId);
                     if (cloud && cloud.isLocked) return false; // Encrypted = Lost
                     return true; // Unencrypted = Warning but available
                 }
                 if (typeFilter === 'everything') {
+                    if (obj.type === 'hw-wallet') return false;
                     if (isInMemory) return false; // Traditional "forget everything in head"
                     if (isCloud) {
                         const cloud = (state.clouds || []).find(c => c.id === mapping.locationId);
@@ -345,7 +370,11 @@ function AnalysisSummary() {
                     if (cloud && !cloud.isLocked) isWarning = true;
                 }
 
-                const statusLabel = isLost ? '🚨 สูญหาย/จำไม่ได้' : (isWarning ? '⚠️ กู้คืนได้ผ่านคลาวด์' : '✅ ยังคงปลอดภัย');
+                let statusLabel = isLost ? '🚨 สูญหาย/จำไม่ได้' : (isWarning ? '⚠️ กู้คืนได้ผ่านคลาวด์' : '✅ ยังคงปลอดภัย');
+                if (isLost && obj.type === 'hw-wallet') {
+                    statusLabel = '🚨 ไม่สามารถใช้งานได้ (ลืม PIN)';
+                }
+
                 const icon = isLost ? '🚨' : (isWarning ? '⚠️' : '✅');
                 return { ...obj, statusLabel, icon };
             });
@@ -357,7 +386,12 @@ function AnalysisSummary() {
     const aggregateForget = (statuses) => {
         const workingMethods = statuses.filter(s => s.status !== 'critical').map(s => s.methodLabel);
         const isRecoverable = workingMethods.length > 0;
-        const outcome = isRecoverable ? 'safe' : 'critical';
+        
+        // FIX: Outcome is safe only if at least one method is safe. If all working are warning, outcome is warning.
+        const hasSafe = statuses.some(s => s.status === 'safe');
+        const hasWarning = statuses.some(s => s.status === 'warning');
+        const outcome = hasSafe ? 'safe' : (hasWarning ? 'warning' : 'critical');
+        
         return { statuses, outcome, workingMethods, isRecoverable };
     };
 
@@ -388,12 +422,14 @@ function AnalysisSummary() {
         // 1. DANGER: External party can spend now
         const canExposedSpend = checkSatisfied(unencryptedCloudObjects);
         
-        // 2. WARNING
-        const exposedDescriptor = unencryptedCloudObjects.some(o => o.type === 'descriptor');
-        const exposedSomeSecrets = unencryptedCloudObjects.some(o => ['mnemonic', 'seed', 'share', 'passphrase'].includes(o.type));
-        
         const methodInvolvedLogicals = new Set(relevantObjects.map(o => o.logicalId));
         const relevantCloudObjects = cloudObjects.filter(o => methodInvolvedLogicals.has(o.logicalId));
+        const relevantUnencryptedCloudObjects = unencryptedCloudObjects.filter(o => methodInvolvedLogicals.has(o.logicalId));
+
+        // 2. WARNING (Only warn if the exposed objects belong to THIS method)
+        const exposedDescriptor = relevantUnencryptedCloudObjects.some(o => o.type === 'descriptor');
+        const exposedSomeSecrets = relevantUnencryptedCloudObjects.some(o => ['mnemonic', 'seed', 'share', 'passphrase'].includes(o.type));
+        
         const allRelevantAreInCloud = relevantObjects.every(robj => 
             relevantCloudObjects.some(cobj => cobj.logicalId === robj.logicalId)
         );
@@ -425,11 +461,19 @@ function AnalysisSummary() {
             let icon = '✅';
             let statusLabel = '✅ พร้อมใช้งาน';
             if (isUnencrypted) {
-                icon = '⚠️';
-                statusLabel = '⚠️ เปิดเผยบนคลาวด์ (ไม่ได้ Encrypt)';
+                if (status === 'critical') {
+                    icon = '🚨';
+                    statusLabel = '🚨 เปิดเผยบนคลาวด์ (อันตรายร้ายแรง)';
+                } else {
+                    icon = '⚠️';
+                    statusLabel = '⚠️ เปิดเผยบนคลาวด์ (ไม่ได้ Encrypt)';
+                }
             } else if (isCloud) {
                 icon = '☁️';
                 statusLabel = '☁️ เก็บไว้บนคลาวด์ (Encrypted)';
+            } else if (mapping?.locationId === 'memory') {
+                icon = '🧠';
+                statusLabel = '🧠 อยู่ในความจำเท่านั้น';
             }
 
             return { ...obj, statusLabel, icon };
@@ -459,7 +503,7 @@ function AnalysisSummary() {
     ];
 
     if (normalOutcome === 'critical') return { label: 'วิกฤต (CRITICAL)', colorClass: 'critical-text' };
-    if (threatOutcomes.includes('critical')) return { label: 'ความเสี่ยงสูง (HIGH RISK)', colorClass: 'high-risk-text' };
+    if (threatOutcomes.includes('critical')) return { label: 'มีความเสี่ยงร้ายแรง (FATAL RISK)', colorClass: 'high-risk-text' };
     if (normalOutcome === 'warning' || threatOutcomes.includes('warning')) return { label: 'ควรระวัง (WARNING)', colorClass: 'warning-text' };
     return { label: 'ปลอดภัยสูง (HIGH SECURITY)', colorClass: 'safe-text' };
   }, [simulations]);
@@ -620,7 +664,7 @@ function AnalysisSummary() {
             <div key={idx} className={`glass-card sim-card outcome-${sim.outcome}`}>
               <div className="loc-title">📍 {sim.location.label}</div>
               <div className={`outcome-badge ${sim.outcome}`}>
-                 {sim.outcome === 'safe' ? '✅ ปลอดภัย' : sim.outcome === 'warning' ? '⚠️ มีความเสี่ยง' : '🚨 ความเสี่ยงสูง'}
+                 {sim.outcome === 'safe' ? '✅ ปลอดภัย' : (sim.outcome === 'warning' ? '⚠️ มีความเสี่ยง' : '🚨 วิกฤต')}
               </div>
               {sim.workingMethods.length > 0 && (
                 <div className="card-working-methods">
@@ -675,7 +719,7 @@ function AnalysisSummary() {
             <div key={idx} className={`glass-card sim-card outcome-${sim.outcome}`}>
               <div className="loc-title">🔥 {sim.location.label}</div>
               <div className={`outcome-badge ${sim.outcome}`}>
-                 {sim.outcome === 'safe' ? '✅ กู้คืนได้' : '🚨 เงินสูญหาย'}
+                 {sim.outcome === 'safe' ? '✅ กู้คืนได้' : (sim.outcome === 'warning' ? '⚠️ มีความเสี่ยง' : '🚨 เงินสูญหาย')}
               </div>
               {sim.workingMethods.length > 0 && (
                 <div className="card-working-methods">
@@ -727,7 +771,7 @@ function AnalysisSummary() {
             <div key={scenario.id} className={`glass-card sim-card single-full scenario-block outcome-${scenario.data.outcome}`}>
               <div className="loc-title">🧠 {scenario.title}</div>
               <div className={`outcome-badge ${scenario.data.outcome}`}>
-                 {scenario.data.outcome === 'safe' ? '✅ กู้คืนได้' : '🚨 เงินสูญหาย'}
+                 {scenario.data.outcome === 'safe' ? '✅ กู้คืนได้' : (scenario.data.outcome === 'warning' ? '⚠️ มีความเสี่ยง' : '🚨 เงินสูญหาย')}
               </div>
               {scenario.data.workingMethods.length > 0 && (
                  <div className="card-working-methods">

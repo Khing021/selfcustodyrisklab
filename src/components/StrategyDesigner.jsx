@@ -19,13 +19,15 @@ function StrategyDesigner() {
       });
 
       // Mnemonic Backup
-      groups.push({
-        id: `obj-mnemonic-${seed.id}`,
-        name: `Mnemonic Backup (${seed.label})`,
-        type: 'mnemonic',
-        seedId: seed.id,
-        isCopyable: true
-      });
+      if (seed.type === 'single') {
+        groups.push({
+          id: `obj-mnemonic-${seed.id}`,
+          name: `Mnemonic Backup (${seed.label})`,
+          type: 'mnemonic',
+          seedId: seed.id,
+          isCopyable: true
+        });
+      }
 
       // Passphrase Backups
       seed.passphrases.forEach(pass => {
@@ -65,12 +67,13 @@ function StrategyDesigner() {
       const seed = state.seeds.find(s => s.accounts.some(a => a.id === accId));
       if (!account || !seed) return;
 
-      // HW & Mnemonic always relevant if seed used
+      // HW always relevant if seed used
       requiredIds.add(`obj-hw-${seed.id}`);
-      requiredIds.add(`obj-mnemonic-${seed.id}`);
-
-      // Shares relevant if multisig accounts are used
-      if (seed.type === 'multi') {
+      
+      if (seed.type === 'single') {
+        requiredIds.add(`obj-mnemonic-${seed.id}`);
+      } else if (seed.type === 'multi') {
+        // Shares relevant if shamir accounts are used
         for (let i = 1; i <= seed.shareCount; i++) {
           requiredIds.add(`obj-share-${seed.id}-${i}`);
         }
@@ -258,14 +261,14 @@ function StrategyDesigner() {
                                                 {state.locations.flatMap((loc, lIdx) => {
                                                   const locChar = String.fromCharCode(65 + lIdx);
                                                   return loc.storagePoints.map((p, pIdx) => (
-                                                    <option key={p.id} value={p.id}>🏠 {loc.label} - {p.label.replace(/\(.*\)/, '').trim()} ({locChar}{pIdx + 1})</option>
+                                                    <option key={p.id} value={p.id}>🏠 {loc.label} - {p.label.replace(/\(.*\)/, '').trim()} ({locChar}{pIdx + 1}){p.isLocked ? ' 🔒' : ''}</option>
                                                   ));
                                                 })}
                                                 {state.clouds.length > 0 && obj.type !== 'hw-wallet' && (
                                                   state.clouds.map((cloud, cIdx) => {
                                                     const cloudChar = String.fromCharCode(65 + cIdx);
                                                     return (
-                                                      <option key={cloud.id} value={cloud.id}>☁️ {cloud.label} ({cloudChar})</option>
+                                                      <option key={cloud.id} value={cloud.id}>☁️ {cloud.label} ({cloudChar}){cloud.isLocked ? ' 🔒' : ''}</option>
                                                     );
                                                   })
                                                 )}
@@ -311,14 +314,14 @@ function StrategyDesigner() {
                                                         {state.locations.flatMap((loc, lIdx) => {
                                                             const locChar = String.fromCharCode(65 + lIdx);
                                                             return loc.storagePoints.map((p, pIdx) => (
-                                                                <option key={p.id} value={p.id}>🏠 {loc.label} - {p.label.replace(/\(.*\)/, '').trim()} ({locChar}{pIdx + 1})</option>
+                                                                <option key={p.id} value={p.id}>🏠 {loc.label} - {p.label.replace(/\(.*\)/, '').trim()} ({locChar}{pIdx + 1}){p.isLocked ? ' 🔒' : ''}</option>
                                                             ));
                                                         })}
                                                         {state.clouds.length > 0 && obj.type !== 'hw-wallet' && (
                                                           state.clouds.map((cloud, cIdx) => {
                                                             const cloudChar = String.fromCharCode(65 + cIdx);
                                                             return (
-                                                              <option key={cloud.id} value={cloud.id}>☁️ {cloud.label} ({cloudChar})</option>
+                                                              <option key={cloud.id} value={cloud.id}>☁️ {cloud.label} ({cloudChar}){cloud.isLocked ? ' 🔒' : ''}</option>
                                                             );
                                                           })
                                                         )}
