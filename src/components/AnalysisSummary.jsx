@@ -56,9 +56,33 @@ function AnalysisSummary() {
     return objects;
   }, [state.seeds, state.replication, state.spendingMethods]);
 
-  const isConfigValid = useMemo(() => {
-     return state.spendingMethods.every(m => m.keySlots.every(slot => !!slot));
-  }, [state.spendingMethods]);
+  const configValidation = useMemo(() => {
+    const isMethodsValid = state.spendingMethods.every(m => m.keySlots.every(slot => !!slot));
+    
+    let isDescriptorValid = true;
+    const hasDescriptor = state.spendingMethods.length > 1 || 
+                         (state.spendingMethods.length === 1 && state.spendingMethods[0].type === 'multi-sig');
+    
+    if (hasDescriptor) {
+      const descriptorId = 'obj-wallet-descriptor';
+      const totalInstances = (state.replication[descriptorId] || 0) + 1;
+      for (let i = 0; i < totalInstances; i++) {
+        const instId = i === 0 ? descriptorId : `${descriptorId}-copy-${i}`;
+        if (!state.objectMapping[instId]?.storagePointId) {
+          isDescriptorValid = false;
+          break;
+        }
+      }
+    }
+
+    return {
+      isValid: isMethodsValid && isDescriptorValid,
+      reason: !isMethodsValid ? 'missing-accounts' : (!isDescriptorValid ? 'missing-descriptor-storage' : 'none')
+    };
+  }, [state.spendingMethods, state.replication, state.objectMapping]);
+
+  const isConfigValid = configValidation.isValid;
+
 
   const hasDescriptorRequirement = useMemo(() => {
     return state.spendingMethods.length > 1 || 
@@ -260,17 +284,29 @@ function AnalysisSummary() {
   }, [state, allObjects, hasDescriptorRequirement]);
 
   if (!isConfigValid) {
+    const isMissingDescriptor = configValidation.reason === 'missing-descriptor-storage';
     return (
       <div className="analysis-summary animate-fade-in invalid-state">
          <div className="analysis-blocker-card glass-card">
             <div className="blocker-icon">⚠️</div>
             <h2>การตั้งค่าไม่สมบูรณ์</h2>
-            <p className="blocker-text">คุณยังระบุคีย์สำหรับ spending scheme ไม่ครบในหัวข้อที่ 3.1 ไม่สามารถสรุปผลการจำลองความเสี่ยงได้</p>
-            <div className="blocker-hint">กรุณาระบุคีย์ (Accounts) ให้ครบทุกช่องในทุกกลยุทธ์การถอนเงิน</div>
+            <p className="blocker-text">
+                {isMissingDescriptor 
+                    ? 'คุณยังไม่ได้ระบุจุดเก็บรักษาสำหรับ Wallet Descriptor ในหัวข้อที่ 3.2 ไม่สามารถสรุปผลการจำลองความเสี่ยงได้'
+                    : 'คุณยังระบุคีย์สำหรับ spending scheme ไม่ครบในหัวข้อที่ 3.1 ไม่สามารถสรุปผลการจำลองความเสี่ยงได้'
+                }
+            </p>
+            <div className="blocker-hint">
+                {isMissingDescriptor
+                    ? 'กรุณาเลือกสถานที่เก็บไฟล์สำรอง Wallet Descriptor ให้ครบทุกสำเนา'
+                    : 'กรุณาระบุคีย์ (Accounts) ให้ครบทุกช่องในทุกกลยุทธ์การถอนเงิน'
+                }
+            </div>
          </div>
       </div>
     );
   }
+
 
   const renderDetailedList = (details) => {
     // Group details by logical object

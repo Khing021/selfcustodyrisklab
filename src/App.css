@@ -1075,7 +1075,14 @@ input:checked + .slider:before {
     background: rgba(20, 20, 25, 0.4);
     border-radius: var(--radius-lg);
     overflow: hidden;
+    transition: var(--transition);
 }
+
+.descriptor-card.invalid-config {
+    border-color: var(--danger);
+    background: rgba(255, 77, 77, 0.02);
+}
+
 
 .descriptor-header {
     display: flex;

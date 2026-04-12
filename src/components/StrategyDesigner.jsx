@@ -333,10 +333,16 @@ function StrategyDesigner() {
         };
 
         const totalInstances = (state.replication[descriptorObj.id] || 0) + 1;
+        
+        // Validation: Every instance must have a storage point selected
+        const descriptorInstances = Array.from({ length: totalInstances }).map((_, i) => 
+          i === 0 ? descriptorObj.id : `${descriptorObj.id}-copy-${i}`
+        );
+        const isDescriptorInvalid = descriptorInstances.some(instId => !state.objectMapping[instId]?.storagePointId);
 
         return (
           <div className="descriptor-section animate-fade-in">
-             <div className="descriptor-card glass-card">
+             <div className={`descriptor-card glass-card ${isDescriptorInvalid ? 'invalid-config' : ''}`}>
                 <header className="descriptor-header">
                    <div className="title-group">
                       <span className="descriptor-icon">📜</span>
@@ -435,9 +441,16 @@ function StrategyDesigner() {
                      </tbody>
                    </table>
                 </div>
+
+                {isDescriptorInvalid && (
+                    <div className="validation-notice-v3" style={{ margin: '12px 24px 24px' }}>
+                        ⚠️ โปรดเลือกจุดเก็บเพื่อสำรองไฟล์ Wallet Descriptor นอกความจำ
+                    </div>
+                )}
              </div>
           </div>
         );
+
       })()}
       
       <div className="methods-footer">
