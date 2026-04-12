@@ -1233,3 +1233,25 @@ input:checked + .slider:before {
         padding: 0 20px;
     }
 }
+/* Analysis Summary Scenarios */
+.sim-cards-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.scenario-block {
+  border-left: 4px solid var(--accent-gold) !important;
+}
+
+.scenario-intro {
+  font-size: 14px;
+  color: var(--text-dim);
+  margin: 4px 0 24px 0;
+  line-height: 1.5;
+  padding-left: 4px;
+}
+
+.sim-card.single-full {
+  width: 100%;
+}

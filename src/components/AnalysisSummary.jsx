@@ -152,7 +152,7 @@ function AnalysisSummary() {
             if (isLocked || isHw) compromisableObjects.push(obj);
             else stolenObjects.push(obj);
           } else if (mapping && mapping.locationId.startsWith('Cloud-')) {
-            const cloud = state.clouds.find(c => c.id === mapping.locationId);
+            const cloud = (state.clouds || []).find(c => c.id === mapping.locationId);
             if (cloud && !cloud.isLocked) stolenObjects.push(obj);
             else if (cloud && cloud.isLocked) compromisableObjects.push(obj);
           }
@@ -257,61 +257,91 @@ function AnalysisSummary() {
       results.disaster.push({ location, statuses: disasterMethodStatuses });
     });
 
-    // --- FORGET / MEMORY LOST SIMULATION ---
-    results.forget = state.spendingMethods.map(method => {
-        const checkSatisfied = getSatisfactionChecker(method);
-        const rememberedObjects = allObjects.filter(obj => {
-          const mapping = state.objectMapping[obj.id];
-          return mapping && mapping.locationId !== 'memory';
+    // --- FORGET / MEMORY LOST SIMULATIONS (C.1 - C.4) ---
+    const runForgetScenario = (typeFilter) => {
+        return state.spendingMethods.map(method => {
+            const checkSatisfied = getSatisfactionChecker(method);
+            const availableObjects = allObjects.filter(obj => {
+                const mapping = state.objectMapping[obj.id];
+                if (!mapping) return true; // Unassigned objects are implicitly available if not in memory? 
+                // Wait, if unassigned, it's not even a thing. But let's follow the filter.
+                
+                const isInMemory = mapping.locationId === 'memory';
+                const isCloud = mapping.locationId.startsWith('Cloud-');
+                
+                // Scenario Logic
+                if (typeFilter === 'secrets' && isInMemory && (obj.type === 'mnemonic' || obj.type === 'share' || obj.type === 'passphrase')) return false;
+                if (typeFilter === 'pin' && isInMemory && obj.type === 'hw-wallet') return false;
+                if (typeFilter === 'cloud' && isCloud) {
+                    const cloud = (state.clouds || []).find(c => c.id === mapping.locationId);
+                    if (cloud && cloud.isLocked) return false; // Encrypted = Lost
+                    return true; // Unencrypted = Warning but available
+                }
+                if (typeFilter === 'everything') {
+                    if (isInMemory) return false; // Traditional "forget everything in head"
+                    if (isCloud) {
+                        const cloud = (state.clouds || []).find(c => c.id === mapping.locationId);
+                        if (cloud && cloud.isLocked) return false; 
+                    }
+                }
+                
+                return true;
+            });
+
+            const userHasDescriptor = !hasDescriptorRequirement || availableObjects.some(o => o.type === 'descriptor');
+            const canSpendDirectly = checkSatisfied(availableObjects);
+
+            const involvedSeedIds = [...new Set(method.keySlots.map(accId => {
+                const seed = state.seeds.find(s => s.accounts.some(a => a.id === accId));
+                return seed?.id;
+            }).filter(id => !!id))];
+            
+            const hasAllSeeds = involvedSeedIds.every(sid => {
+                const seed = state.seeds.find(s => s.id === sid);
+                if (!seed) return false;
+                if (seed.type === 'single') return availableObjects.some(o => o.seedId === sid && o.type === 'mnemonic');
+                const uniqueShares = new Set(availableObjects.filter(o => o.seedId === sid && o.type === 'share').map(s => s.logicalId)).size;
+                return uniqueShares === seed.shareCount;
+            });
+
+            let status = 'safe';
+            if (!canSpendDirectly) status = 'critical';
+            else if (canSpendDirectly && !userHasDescriptor) {
+                status = hasAllSeeds ? 'warning' : 'critical';
+            }
+
+            const relevant = getRelevantObjectsForMethod(method);
+            const details = relevant.map(obj => {
+                const mapping = state.objectMapping[obj.id];
+                const isInMemory = mapping?.locationId === 'memory';
+                const isCloud = mapping?.locationId.startsWith('Cloud-');
+                let isLost = !availableObjects.some(o => o.id === obj.id);
+                let isWarning = false;
+
+                if (typeFilter === 'cloud' && isCloud) {
+                    const cloud = (state.clouds || []).find(c => c.id === mapping.locationId);
+                    if (cloud && !cloud.isLocked) isWarning = true;
+                }
+                if (typeFilter === 'everything' && isCloud) {
+                    const cloud = (state.clouds || []).find(c => c.id === mapping.locationId);
+                    if (cloud && !cloud.isLocked) isWarning = true;
+                }
+
+                const statusLabel = isLost ? '🚨 สูญหาย/จำไม่ได้' : (isWarning ? '⚠️ กู้คืนได้ผ่านคลาวด์' : '✅ ยังคงปลอดภัย');
+                const icon = isLost ? '🚨' : (isWarning ? '⚠️' : '✅');
+                return { ...obj, statusLabel, icon };
+            });
+
+            return { methodLabel: method.label, status, details };
         });
+    };
 
-        const userHasDescriptor = !hasDescriptorRequirement || rememberedObjects.some(o => o.type === 'descriptor');
-        const canSpendDirectly = checkSatisfied(rememberedObjects);
-
-        const involvedSeedIds = [...new Set(method.keySlots.map(accId => {
-            const seed = state.seeds.find(s => s.accounts.some(a => a.id === accId));
-            return seed?.id;
-        }).filter(id => !!id))];
-        
-        const hasAllSeeds = involvedSeedIds.every(sid => {
-            const seed = state.seeds.find(s => s.id === sid);
-            if (!seed) return false;
-            if (seed.type === 'single') return rememberedObjects.some(o => o.seedId === sid && o.type === 'mnemonic');
-            const uniqueShares = new Set(rememberedObjects.filter(o => o.seedId === sid && o.type === 'share').map(s => s.logicalId)).size;
-            return uniqueShares === seed.shareCount;
-        });
-
-        let status = 'safe';
-        if (!canSpendDirectly) status = 'critical';
-        else if (canSpendDirectly && !userHasDescriptor) {
-            status = hasAllSeeds ? 'warning' : 'critical';
-        }
-
-        const relevant = getRelevantObjectsForMethod(method);
-        const details = relevant.map(obj => {
-            const isInMemory = state.objectMapping[obj.id]?.locationId === 'memory';
-            const statusLabel = isInMemory ? '🚨 ถูกลืม' : '✅ ยังคงจำได้ / มีบันทึกไว้';
-            const icon = isInMemory ? '🚨' : '✅';
-            return { ...obj, statusLabel, icon };
-        });
-
-        // Cloud password sub-segment
-        const cloudPasswordResults = state.clouds.map(cloud => {
-            const usesThisCloud = allObjects.some(o => state.objectMapping[o.id]?.locationId === cloud.id);
-            if (!usesThisCloud) return null;
-            return {
-                label: cloud.label,
-                id: cloud.id,
-                isSafe: !cloud.isLocked,
-                statusLabel: cloud.isLocked ? '🚨 ไม่สามารถเข้าถึงข้อมูลได้ถาวร' : '✅ สามารถกู้คืนข้อมูลคลาวด์ได้',
-                desc: cloud.isLocked 
-                    ? 'เนื่องจากคลาวด์มีการเข้ารหัสและคุณลืมรหัสผ่าน ผู้ให้บริการไม่สามารถช่วยกู้คืนข้อมูลได้'
-                    : 'คลาวด์ไม่มีการเข้ารหัส คุณสามารถกู้คืนสิทธิ์การเข้าถึงผ่านอีเมลหรือผู้ให้บริการได้'
-            };
-        }).filter(c => !!c);
-
-        return { methodLabel: method.label, status, details, cloudPasswordResults };
-    });
+    results.forget = {
+        secrets: runForgetScenario('secrets'),
+        pin: runForgetScenario('pin'),
+        clouds: runForgetScenario('cloud'),
+        everything: runForgetScenario('everything')
+    };
 
     return results;
   }, [state, allObjects, hasDescriptorRequirement]);
@@ -507,53 +537,46 @@ function AnalysisSummary() {
 
       <section className="simulation-zone">
         <h3>C - หากลืม (Memory Lost Simulation)</h3>
-        <div className="sim-cards">
-            <div className="glass-card sim-card single-full">
-              <div className="loc-title">🧠 สิ่งที่จำไว้ในหัว</div>
+        <div className="sim-cards-vertical">
+          {[
+            { id: 'secrets', title: 'C.1 - หากลืมความลับ (Forget Secrets)', desc: 'ลืม Mnemonic หรือ Passphrase ทั้งหมดที่อยู่ในความจำ (ของที่จดไว้ยังคงอยู่)', data: simulations.forget.secrets },
+            { id: 'pin', title: 'C.2 - หากลืม PIN (Forget PIN)', desc: 'ลืมรหัส PIN ของ Hardware Wallet ทั้งหมด (ตัวเครื่องยังอยู่แต่เข้าถึงไม่ได้)', data: simulations.forget.pin },
+            { id: 'cloud', title: 'C.3 - หากลืม Cloud Password', desc: 'ลืมพาสเวิร์ดคลาวด์: คลาวด์ที่เข้ารหัสลับจะสูญเสียข้อมูล ส่วนที่ไม่เข้ารหัสลับยังกู้คืนสิทธิ์ได้', data: simulations.forget.clouds },
+            { id: 'everything', title: 'C.4 - ลืมทุกอย่าง (Total Memory Loss)', desc: 'สมมติว่าเกิดเหตุการณ์ในข้อ 1, 2 และ 3 พร้อมกันทั้งหมด', data: simulations.forget.everything }
+          ].map(scenario => (
+            <div key={scenario.id} className="glass-card sim-card single-full scenario-block">
+              <div className="loc-title">🧠 {scenario.title}</div>
+              <p className="scenario-intro">{scenario.desc}</p>
               <div className="sim-results">
-                {simulations.forget.map((st, i) => {
-                  const itemId = `memory-C-${i}`;
+                {scenario.data.map((st, i) => {
+                  const itemId = `memory-${scenario.id}-${i}`;
                   const isExpanded = expandedItems.has(itemId);
                   return (
-                    <React.Fragment key={i}>
-                      <div 
-                        className={`res-item res-expandable ${st.status} ${isExpanded ? 'expanded' : ''}`}
-                        onClick={() => toggleExpand(itemId)}
-                      >
-                        <div className="res-header">
-                            <strong>วอลเล็ต: {st.methodLabel}</strong>
-                            <span className="status-pill">
-                                {st.status === 'safe' ? '✅ ปลอดภัย' : st.status === 'warning' ? '⚠️ คำเตือน' : '🚨 เงินสูญหายถาวร'}
-                            </span>
-                        </div>
-                        <p className="res-desc">
-                            {st.status === 'safe' 
-                                ? `หากคุณลืมข้อมูลทั้งหมดที่อยู่ในความจำ คุณยังสามารถกู้คืนเงินได้จากสำเนาทางกายภาพที่เก็บไว้ตามสถานที่ต่างๆ`
-                                : st.status === 'warning'
-                                ? `คุณลืมตำแหน่งหรือข้อมูล Wallet Descriptor แต่ยังคงมีกุญแจกายภาพครบทุกชุดสำหรับการสร้างใหม่`
-                                : `คำเตือน! หากคุณลืมข้อมูลในความจำ คุณจะไม่สามารถกู้คืนกุญแจที่จำเป็นได้อีกต่อไป เพราะไม่มีการจดบันทึกลงบนวัตถุทางกายภาพชุดอื่นไว้เลย`}
-                        </p>
-                        {isExpanded && renderDetailedList(st.details)}
+                    <div 
+                      key={i}
+                      className={`res-item res-expandable ${st.status} ${isExpanded ? 'expanded' : ''}`}
+                      onClick={() => toggleExpand(itemId)}
+                    >
+                      <div className="res-header">
+                          <strong>วอลเล็ต: {st.methodLabel}</strong>
+                          <span className="status-pill">
+                              {st.status === 'safe' ? '✅ ปลอดภัย' : st.status === 'warning' ? '⚠️ คำเตือน' : '🚨 เงินสูญหาย'}
+                          </span>
                       </div>
-
-                      {st.cloudPasswordResults && st.cloudPasswordResults.length > 0 && (
-                          <div className="cloud-password-summary" style={{ marginTop: '16px' }}>
-                             {st.cloudPasswordResults.map(cloud => (
-                                <div key={cloud.id} className={`res-item ${cloud.isSafe ? 'safe' : 'critical'}`} style={{ borderStyle: 'dashed', opacity: 0.9 }}>
-                                   <div className="res-header">
-                                      <strong>🧠 คลาวด์พาสเวิร์ด: {cloud.label}</strong>
-                                      <span className="status-pill">{cloud.statusLabel}</span>
-                                   </div>
-                                   <p className="res-desc">{cloud.desc}</p>
-                                </div>
-                             ))}
-                          </div>
-                      )}
-                    </React.Fragment>
+                      <p className="res-desc">
+                          {st.status === 'safe' 
+                              ? `คุณยังปลอดภัย เพราะมีสิ่งของทางกายภาพเพียงพอที่จะกู้คืนเงินได้แม้จะลืมข้อมูลในหัวไป`
+                              : st.status === 'warning'
+                              ? `กุญแจหลักยังครบ แต่ต้องใช้เวลาและความพยายามในการสร้างโครงสร้างกระเป๋าใหม่ (เช่น ลืม Descriptor)`
+                              : `คำเตือน! เงินสูญหายถาวร เนื่องจากข้อมูลที่เหลืออยู่ไม่เพียงพอที่จะประกอบกุญแจคืนได้`}
+                      </p>
+                      {isExpanded && renderDetailedList(st.details)}
+                    </div>
                   );
                 })}
               </div>
             </div>
+          ))}
         </div>
       </section>
     </div>

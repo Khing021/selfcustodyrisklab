@@ -45,10 +45,29 @@ const initialState = {
   }
 };
 
+const ensureStateSafety = (state) => {
+  if (!state) return initialState;
+  return {
+    ...initialState,
+    ...state,
+    nextIds: {
+      ...initialState.nextIds,
+      ...(state.nextIds || {})
+    },
+    // Ensure all critical top-level arrays/objects exist
+    clouds: state.clouds || [],
+    locations: state.locations || initialState.locations,
+    seeds: state.seeds || initialState.seeds,
+    spendingMethods: state.spendingMethods || initialState.spendingMethods,
+    objectMapping: state.objectMapping || {},
+    replication: state.replication || {}
+  };
+};
+
 function reducer(state, action) {
   switch (action.type) {
     case 'LOAD_STATE':
-      return action.payload;
+      return ensureStateSafety(action.payload);
 
     case 'ADD_LOCATION': {
       const char = String.fromCharCode(65 + state.nextIds.location); // A=65
@@ -420,7 +439,8 @@ export function SimulationProvider({ children }) {
     const saved = localStorage.getItem('bitcoin_risk_sim_state');
     if (saved) {
       try {
-        dispatch({ type: 'LOAD_STATE', payload: JSON.parse(saved) });
+        const parsed = JSON.parse(saved);
+        dispatch({ type: 'LOAD_STATE', payload: ensureStateSafety(parsed) });
       } catch (e) {
         console.error('Failed to load state', e);
       }
