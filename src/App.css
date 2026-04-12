@@ -776,6 +776,11 @@ input:checked + .slider:before {
     letter-spacing: 0.5px;
 }
 
+.object-table-v3 th:first-child,
+.object-table-v3 td:first-child {
+    width: 45%;
+}
+
 .object-row-primary-v3 td, .object-row-replica-v3 td {
     padding: 12px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.03);
@@ -784,8 +789,18 @@ input:checked + .slider:before {
 .obj-actions-cell {
     display: flex;
     align-items: center;
-    justify-content: flex-end; /* Right-align */
     gap: 12px;
+    width: 100%;
+}
+
+.obj-actions-cell select {
+    margin-right: auto; /* Push buttons to the right */
+    min-width: 280px; /* Increased width (~1.5x) */
+}
+
+.obj-actions-cell .add-copy-mini,
+.obj-actions-cell .mini-trash {
+    margin-left: auto; /* Ensure button stays on the right if select is missing */
 }
 
 .object-row-replica-v3 .replica-label {
@@ -1086,8 +1101,8 @@ input:checked + .slider:before {
 
 /* --- Wallet Descriptor Card --- */
 .descriptor-section {
-    margin: 32px 0;
-    padding: 0 40px;
+    margin: 20px 0;
+    padding: 0;
 }
 
 .descriptor-card {
@@ -1225,7 +1240,7 @@ input:checked + .slider:before {
 
 @media (max-width: 1024px) {
     .descriptor-section {
-        padding: 0 20px;
+        padding: 0;
     }
 }
 /* Analysis Summary Scenarios */
