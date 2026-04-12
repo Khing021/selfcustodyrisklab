@@ -161,7 +161,15 @@ function StrategyDesigner() {
                             }}
                           >
                             <option value="">-- เลือก Account ({method.type === 'single-sig' ? 'Single' : 'Multi'}) --</option>
-                            {selectableAccounts.map(acc => {
+                            {selectableAccounts
+                               .filter(acc => {
+                                 // Keep if it's the current selection for this slot
+                                 if (acc.id === slot) return true;
+                                 // Hide if it's selected in any other slot of THIS method
+                                 const isUsedElsewhere = method.keySlots.some((sId, sIdx) => sId === acc.id && sIdx !== idx);
+                                 return !isUsedElsewhere;
+                               })
+                               .map(acc => {
                                // Find seed to replicate Section 2 naming
                                const seed = state.seeds.find(s => s.accounts.some(a => a.id === acc.id));
                                const seedChar = seed ? String.fromCharCode(65 + state.seeds.indexOf(seed)) : '?';

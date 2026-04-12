@@ -448,8 +448,8 @@ function AnalysisSummary() {
   }, [state, allObjects, hasDescriptorRequirement]);
 
   const overallStatus = useMemo(() => {
-    const outcomes = [
-      simulations.normal.outcome,
+    const normalOutcome = simulations.normal.outcome;
+    const threatOutcomes = [
       ...simulations.compromise.map(s => s.outcome),
       ...simulations.disaster.map(s => s.outcome),
       simulations.forget.secrets.outcome,
@@ -458,8 +458,9 @@ function AnalysisSummary() {
       simulations.forget.everything.outcome
     ];
 
-    if (outcomes.includes('critical')) return { label: 'วิกฤต (CRITICAL)', colorClass: 'critical-text' };
-    if (outcomes.includes('warning')) return { label: 'ควรระวัง (WARNING)', colorClass: 'warning-text' };
+    if (normalOutcome === 'critical') return { label: 'วิกฤต (CRITICAL)', colorClass: 'critical-text' };
+    if (threatOutcomes.includes('critical')) return { label: 'ความเสี่ยงสูง (HIGH RISK)', colorClass: 'high-risk-text' };
+    if (normalOutcome === 'warning' || threatOutcomes.includes('warning')) return { label: 'ควรระวัง (WARNING)', colorClass: 'warning-text' };
     return { label: 'ปลอดภัยสูง (HIGH SECURITY)', colorClass: 'safe-text' };
   }, [simulations]);
 
@@ -574,7 +575,7 @@ function AnalysisSummary() {
             <div className={`glass-card sim-card single-full outcome-${simulations.normal.outcome}`}>
               <div className="loc-title">✅ วิเคราะห์ความพร้อมของระบบ</div>
               <div className={`outcome-badge ${simulations.normal.outcome}`}>
-                 {simulations.normal.outcome === 'safe' ? '✅ ปลอดภัย' : simulations.normal.outcome === 'warning' ? '⚠️ ควรระวัง' : '🚨 อันตราย'}
+                 {simulations.normal.outcome === 'safe' ? '✅ ปลอดภัย' : simulations.normal.outcome === 'warning' ? '⚠️ อันตราย' : '🚨 วิกฤติ'}
               </div>
               <div className="sim-results">
                 {simulations.normal.statuses.map((st, i) => {
@@ -589,19 +590,19 @@ function AnalysisSummary() {
                       <div className="res-header">
                           <strong>วอลเล็ต: {st.methodLabel}</strong>
                           <span className="status-pill">
-                              {st.status === 'safe' ? '✅ ปลอดภัย' : st.status === 'warning' ? '⚠️ ควรระวัง' : '🚨 อันตราย'}
+                              {st.status === 'safe' ? '✅ ปลอดภัย' : st.status === 'warning' ? '⚠️ อันตราย' : '🚨 วิกฤติ'}
                           </span>
                       </div>
                       <p className="res-desc">
                           {st.status === 'critical' 
-                              ? 'ตรวจพบความเสี่ยงขั้นสูงสุด: ข้อมูลความลับของคุณรั่วไหลบนคลาวด์ในสถานะที่บุคคลภายนอกสามารถขโมยเงินออกไปได้ทันที'
+                              ? 'ตรวจพบความเสี่ยงขั้นสูงสุด: ข้อมูลความลับของคุณถูกเก็บไว้อย่างครบถ้วนอยู่บนคลาวด์ในสภาพพร้อมใช้งาน ทำให้บุคคลภายนอกสามารถขโมยเงินออกไปได้ทันที'
                               : st.status === 'warning'
                               ? (st.reason === 'cloud-dependency' 
-                                  ? 'แม้จะเครื่องมือจะครบ แต่ระบบถูกตั้งไว้บนคลาวด์ทั้งหมด (แม้จะ Encrypted) ซึ่งถือว่ามีความเสี่ยงในระยะยาวหากระบบคลาวด์มีปัญหา'
+                                  ? 'แม้ข้อมูลทุกอย่างที่จำเป็นสำหรับการโอนเงินออกจะอยู่บนคลาวด์ แต่เนื่องจากอยู่ในสภาพเข้ารหัส ผู้ไม่หวังดีจึงไม่สามารถโอนเงินออกไปได้จนกว่าจะถอดรหัสได้สำเร็จ'
                                   : st.reason === 'exposed-privacy'
-                                  ? 'ความเป็นส่วนตัวรั่วไหล: Wallet Descriptor ถูกพบบนคลาวด์โดยไม่ได้เข้ารหัสไว้'
-                                  : 'ตรวจพบความเสี่ยง: กุญแจบางส่วนถูกพบบนคลาวด์โดยไม่ได้เข้ารหัสไว้ แม้จะโอนเงินไม่ได้ทันทีแต่ถือว่าข้อมูลรั่วไหลแล้ว')
-                              : 'ระบบของคุณถูกจัดเก็บไว้อย่างปลอดภัยและมิดชิด ความลับสำคัญไม่ได้อยู่นอกการควบคุมในสถานะที่เสี่ยงต่อการถูกเข้าถึง'}
+                                  ? 'Wallet Descriptor ถูกเก็บไว้บนคลาวด์โดยไม่ได้เข้ารหัส ทำให้อาจมีบุคคลภายนอกสามารถเฝ้าจับตาความเคลื่อนไหวของเงินเราได้ และรู้ว่าเรามีเงินอยู่เท่าไร'
+                                  : 'ความลับบางส่วนถูกเก็บไว้บนคลาวด์โดยไม่ได้เข้ารหัสไว้ แม้จะโอนเงินไม่ได้ทันทีแต่ถือว่าข้อมูลรั่วไหลแล้ว')
+                              : 'ความลับทั้งหมดถูกเก็บไว้นอกคลาวด์ หรือแม้มีบางส่วนอยู่บนคลาวด์ก็อยู่ในสภาพเข้ารหัส'}
                       </p>
                       {isExpanded && renderDetailedList(st.details)}
                     </div>
@@ -619,7 +620,7 @@ function AnalysisSummary() {
             <div key={idx} className={`glass-card sim-card outcome-${sim.outcome}`}>
               <div className="loc-title">📍 {sim.location.label}</div>
               <div className={`outcome-badge ${sim.outcome}`}>
-                 {sim.outcome === 'safe' ? '✅ ปลอดภัย' : sim.outcome === 'warning' ? '⚠️ มีความเสี่ยง' : '🚨 วิกฤต'}
+                 {sim.outcome === 'safe' ? '✅ ปลอดภัย' : sim.outcome === 'warning' ? '⚠️ มีความเสี่ยง' : '🚨 ความเสี่ยงสูง'}
               </div>
               {sim.workingMethods.length > 0 && (
                 <div className="card-working-methods">
@@ -639,20 +640,22 @@ function AnalysisSummary() {
                       <div className="res-header">
                           <strong>วอลเล็ต: {st.methodLabel}</strong>
                           <span className="status-pill">
-                              {st.isCompromised ? '🚨 วิกฤต: เงินสูญหาย' : st.isAtRisk ? '⚠️ คำเตือน: ป้องกันโดยรหัส' : '✅ ปลอดภัย'}
+                              {st.isCompromised 
+                                ? (st.reason === 'thief-spend' ? '🚨 เงินถูกขโมย' : '🚨 เงินสูญหาย') 
+                                : st.isAtRisk ? '⚠️ มีความเสี่ยง' : '✅ ปลอดภัย'}
                           </span>
                       </div>
                       <p className="res-desc">
                           {st.isCompromised 
                               ? (st.reason === 'thief-spend' 
-                                  ? `โจรสามารถเข้าถึง ${st.stolen?.map(o => o.name).join(', ')} และโอนเงินออกได้ทันที`
-                                  : `คุณสูญเสียการเข้าถึงเงิน เนื่องจากกุญแจสำคัญถูกขโมยไปและไม่มีสำเนาเหลืออยู่ที่อื่นเลย`)
+                                  ? `โจรสามารถเข้าถึงวัตถุพยานกุญแจและโอนเงินออกได้ทันที`
+                                  : `โจรสามารถขโมยวัดถุพยานกุญแจไปได้ ถึงแม้ข้อมูลเหล่านั้นจะถูกปกป้องด้วยรหัสหรือไม่ครบถ้วนพอที่โจรจะโอนเงินออก แต่เนื่องจากคุณไม่มีสำเนาของข้อมูลดังกล่าวอยู่ที่อื่นเลย คุณจึงสูญเสียการเข้าถึงเงินอย่างถาวร`)
                               : st.isAtRisk 
                               ? (st.reason === 'privacy-loss'
-                                  ? `โจรเข้าถึง Wallet Descriptor ได้ แม้จะขโมยเงินไม่ได้ในตอนนี้ แต่ข้อมูลความเป็นส่วนตัวของคุณรั่วไหล และโจรจะสามารถติดตามยอดเงินของคุณได้`
+                                  ? `โจรเข้าถึง Wallet Descriptor ได้ แม้จะขโมยเงินไม่ได้ในตอนนี้ แต่ข้อมูลความเป็นส่วนตัวของคุณรั่วไหล และโจรจะสามารถติดตามยอดเงินของคุณได้และรู้ว่าคุณมีเงินเท่าไร`
                                   : st.reason === 'crack-risk'
-                                  ? `เงินยังไม่ถูกโอนออกในตอนนี้ แต่หากโจรแกะรหัสได้ เงินจะถูกขโมยทันที`
-                                  : `หากโจรแกะรหัสในจุดเก็บนี้ได้ คุณจะไม่สามารถกู้คืนเงินได้อีกต่อไป เพราะกุญแจที่เหลืออยู่ในมือโจรคือชุดสุดท้าย`)
+                                  ? `ข้อมูลที่โจรต้องใช้เพื่อโอนเงินออกถูกปกป้องไว้ด้วยรหัส PIN รหัสตู้เซฟ หรือกุญแจเซฟ แต่หากโจรแกะรหัสได้เงินจะถูกขโมยทันที`
+                                  : `ข้อมูลสำคัญของคุณถูกปกป้องไว้ด้วยตู้เซฟหรือกุญแจเซฟ หากโจรแกะรหัสในจุดเก็บนี้ได้และขโมย backup ไป แม้ข้อมูลนั้นไม่เพียงพอที่โจรจะโอนเงินออก แต่คุณจะไม่สามารถกู้คืนเงินได้อีกต่อไป เพราะคุณไม่มีสำเนาของข้อมูลนั้นอยู่ที่อื่นเลย`)
                               : `ต่อให้โจรบุกรุกและแกะรหัสทุกอย่างในที่นี่ได้ ก็ไม่สามารถขโมยเงินของคุณไปได้ และคุณยังมีกุญแจกู้คืนสำรองไว้ในที่ปลอดภัยอื่นๆ`}
                       </p>
                       {isExpanded && renderDetailedList(st.details)}
@@ -672,7 +675,7 @@ function AnalysisSummary() {
             <div key={idx} className={`glass-card sim-card outcome-${sim.outcome}`}>
               <div className="loc-title">🔥 {sim.location.label}</div>
               <div className={`outcome-badge ${sim.outcome}`}>
-                 {sim.outcome === 'safe' ? '✅ กู้คืนได้' : '🚨 สูญหายถาวร'}
+                 {sim.outcome === 'safe' ? '✅ กู้คืนได้' : '🚨 เงินสูญหาย'}
               </div>
               {sim.workingMethods.length > 0 && (
                 <div className="card-working-methods">
@@ -692,15 +695,15 @@ function AnalysisSummary() {
                       <div className="res-header">
                           <strong>วอลเล็ต: {st.methodLabel}</strong>
                           <span className="status-pill">
-                              {st.status === 'safe' ? '✅ ปลอดภัย' : st.status === 'warning' ? '⚠️ คำเตือน' : '🚨 เงินสูญหายถาวร'}
+                              {st.status === 'safe' ? '✅ ปลอดภัย' : st.status === 'warning' ? '⚠️ มีความเสี่ยง' : '🚨 เงินสูญหาย'}
                           </span>
                       </div>
                       <p className="res-desc">
                           {st.status === 'safe' 
                               ? `หากที่นี่ถูกทำลาย คุณยังสามารถกู้คืนเงินได้จากสำเนาหรือส่วนแบ่งกุญแจที่เก็บไว้ในที่ปลอดภัยอื่นๆ`
                               : st.status === 'warning'
-                              ? `Wallet Descriptor สูญหาย แต่คุณยังมีกุญแจ (Seeds) ครบถ้วนพอที่จะสร้าง Descriptor ขึ้นมาใหม่และกู้คืนกระเป๋าได้ (มีความเสี่ยงหากคุณจำโครงสร้างเดิมไม่ได้)`
-                              : `คำเตือน! หากเกิดภัยพิบัติที่นี่ คุณจะไม่สามารถกู้คืนกุญแจที่จำเป็นได้อีกต่อไป ทำให้เงินสูญหายทันที`}
+                              ? `Wallet Descriptor สูญหายโดยไม่มีสำเนาสำรองอยู่ที่อื่น แต่คุณยังมีกุญแจ (Seeds) ครบถ้วนพอที่จะสร้าง Descriptor ขึ้นมาใหม่และกู้คืนกระเป๋าได้ (มีความเสี่ยงหากคุณจำโครงสร้างเดิมไม่ได้)`
+                              : `คำเตือน! หากเกิดภัยพิบัติที่นี่และทุกสิ่งที่เก็บไว้ที่นี่ถูกทำลาย คุณจะไม่สามารถเข้าถึงเงินได้อีกต่อไป`}
                       </p>
                       {isExpanded && renderDetailedList(st.details)}
                     </div>
@@ -724,7 +727,7 @@ function AnalysisSummary() {
             <div key={scenario.id} className={`glass-card sim-card single-full scenario-block outcome-${scenario.data.outcome}`}>
               <div className="loc-title">🧠 {scenario.title}</div>
               <div className={`outcome-badge ${scenario.data.outcome}`}>
-                 {scenario.data.outcome === 'safe' ? '✅ กู้คืนได้' : '🚨 สูญหายถาวร'}
+                 {scenario.data.outcome === 'safe' ? '✅ กู้คืนได้' : '🚨 เงินสูญหาย'}
               </div>
               {scenario.data.workingMethods.length > 0 && (
                  <div className="card-working-methods">
@@ -745,14 +748,14 @@ function AnalysisSummary() {
                       <div className="res-header">
                           <strong>วอลเล็ต: {st.methodLabel}</strong>
                           <span className="status-pill">
-                              {st.status === 'safe' ? '✅ ปลอดภัย' : st.status === 'warning' ? '⚠️ คำเตือน' : '🚨 เงินสูญหาย'}
+                              {st.status === 'safe' ? '✅ ปลอดภัย' : st.status === 'warning' ? '⚠️ มีความเสี่ยง' : '🚨 เงินสูญหาย'}
                           </span>
                       </div>
                       <p className="res-desc">
                           {st.status === 'safe' 
-                              ? `คุณยังปลอดภัย เพราะมีสิ่งของทางกายภาพเพียงพอที่จะกู้คืนเงินได้แม้จะลืมข้อมูลในหัวไป`
+                              ? `คุณยังปลอดภัย เพราะมีสิ่งของทางกายภาพเพียงพอที่จะกู้คืนเงินได้แม้จะลืมข้อมูลในหัวไป (แต่ยังต้องจำสถานที่เก็บสำเนาข้อมูลเหล่านั้นได้)`
                               : st.status === 'warning'
-                              ? `กุญแจหลักยังครบ แต่ต้องใช้เวลาและความพยายามในการสร้างโครงสร้างกระเป๋าใหม่ (เช่น ลืม Descriptor)`
+                              ? `Wallet Descriptor สูญหายโดยไม่มีสำเนาสำรองอยู่ที่อื่น แต่คุณยังมีกุญแจ (Seeds) ครบถ้วนพอที่จะสร้าง Descriptor ขึ้นมาใหม่และกู้คืนกระเป๋าได้ (มีความเสี่ยงหากคุณจำโครงสร้างเดิมไม่ได้)`
                               : `คำเตือน! เงินสูญหายถาวร เนื่องจากข้อมูลที่เหลืออยู่ไม่เพียงพอที่จะประกอบกุญแจคืนได้`}
                       </p>
                       {isExpanded && renderDetailedList(st.details)}

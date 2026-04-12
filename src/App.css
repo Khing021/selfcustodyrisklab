@@ -1318,3 +1318,11 @@ input:checked + .slider:before {
 .safe-text { color: var(--success); }
 .warning-text { color: var(--warning); }
 .critical-text { color: var(--danger); }
+.high-risk-text { color: #ff3b30; text-shadow: 0 0 10px rgba(255, 59, 48, 0.3); }
+
+.sim-card.outcome-danger {
+    border: 1.5px solid rgba(255, 171, 0, 0.6) !important;
+}
+.sim-card.outcome-high-risk {
+    border: 1.5px solid rgba(255, 59, 48, 0.6) !important;
+}

@@ -25,3 +25,5 @@ dist-ssr
 
 # Simulation Data
 jsonStage
+analysis_descriptions.txt
+analysis_descriptions_revised.txt
