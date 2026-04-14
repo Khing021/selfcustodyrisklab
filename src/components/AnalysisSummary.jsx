@@ -18,17 +18,17 @@ function AnalysisSummary() {
   const allObjects = useMemo(() => {
     const objects = [];
 
-    state.seeds.forEach(seed => {
+    (state.seeds || []).forEach(seed => {
       const logicals = [];
       logicals.push({ logicalId: `obj-hw-${seed.id}`, name: `Hardware Wallet (${seed.label})`, type: 'hw-wallet', seedId: seed.id });
       if (seed.type === 'single') {
         logicals.push({ logicalId: `obj-mnemonic-${seed.id}`, name: `Mnemonic (${seed.label})`, type: 'mnemonic', seedId: seed.id });
       } else {
-        for (let i = 1; i <= seed.shareCount; i++) {
+        for (let i = 1; i <= (seed.shareCount || 0); i++) {
           logicals.push({ logicalId: `obj-share-${seed.id}-${i}`, name: `Share #${i} (${seed.label})`, type: 'share', seedId: seed.id, threshold: seed.threshold });
         }
       }
-      seed.passphrases.forEach(p => {
+      (seed.passphrases || []).forEach(p => {
         logicals.push({ logicalId: `obj-pass-${p.id}`, name: `Passphrase (${p.label})`, type: 'passphrase', passphraseId: p.id, seedId: seed.id });
       });
 
@@ -42,14 +42,15 @@ function AnalysisSummary() {
     });
 
     // Add Wallet Descriptor if applicable
-    const hasDescriptor = state.spendingMethods.length > 1 || 
-                         (state.spendingMethods.length === 1 && state.spendingMethods[0].type === 'multi-sig');
+    const spendingMethods = state.spendingMethods || [];
+    const hasDescriptor = spendingMethods.length > 1 || 
+                         (spendingMethods.length === 1 && spendingMethods[0].type === 'multi-sig');
     if (hasDescriptor) {
       const log = { logicalId: 'obj-wallet-descriptor', name: 'Wallet Descriptor', type: 'descriptor' };
       objects.push({ ...log, id: log.logicalId });
-      const copyCount = state.replication[log.logicalId] || 0;
+      const copyCount = state.replication['obj-wallet-descriptor'] || 0;
       for (let i = 1; i <= copyCount; i++) {
-        objects.push({ ...log, id: `${log.logicalId}-copy-${i}`, name: `${log.name} (Copy #${i})` });
+        objects.push({ ...log, id: `obj-wallet-descriptor-copy-${i}`, name: `${log.name} (Copy #${i})` });
       }
     }
 
@@ -57,18 +58,19 @@ function AnalysisSummary() {
   }, [state.seeds, state.replication, state.spendingMethods, state.clouds]);
 
   const configValidation = useMemo(() => {
-    const isMethodsValid = state.spendingMethods.every(m => m.keySlots.every(slot => !!slot));
+    const spendingMethods = state.spendingMethods || [];
+    const isMethodsValid = spendingMethods.every(m => (m.keySlots || []).every(slot => !!slot));
     
     let isDescriptorValid = true;
-    const hasDescriptor = state.spendingMethods.length > 1 || 
-                         (state.spendingMethods.length === 1 && state.spendingMethods[0].type === 'multi-sig');
+    const hasDescriptor = spendingMethods.length > 1 || 
+                         (spendingMethods.length === 1 && spendingMethods[0].type === 'multi-sig');
     
     if (hasDescriptor) {
       const descriptorId = 'obj-wallet-descriptor';
-      const totalInstances = (state.replication[descriptorId] || 0) + 1;
+      const totalInstances = ((state.replication || {})[descriptorId] || 0) + 1;
       for (let i = 0; i < totalInstances; i++) {
         const instId = i === 0 ? descriptorId : `${descriptorId}-copy-${i}`;
-        if (!state.objectMapping[instId]?.storagePointId) {
+        if (!(state.objectMapping || {})[instId]?.storagePointId) {
           isDescriptorValid = false;
           break;
         }
@@ -90,15 +92,17 @@ function AnalysisSummary() {
   }, [state.spendingMethods]);
 
   const getRelevantObjectsForMethod = (method) => {
+    if (!method || !method.keySlots) return [];
     const logicalIds = new Set();
-    method.keySlots.forEach(accId => {
-       const account = state.seeds.flatMap(s => s.accounts).find(a => a.id === accId);
-       const seed = state.seeds.find(s => s.accounts.some(a => a.id === accId));
+    (method.keySlots || []).forEach(accId => {
+       if (!accId) return;
+       const account = (state.seeds || []).flatMap(s => s.accounts || []).find(a => a.id === accId);
+       const seed = (state.seeds || []).find(s => (s.accounts || []).some(a => a.id === accId));
        if (seed) {
           logicalIds.add(`obj-hw-${seed.id}`);
           if (seed.type === 'single') logicalIds.add(`obj-mnemonic-${seed.id}`);
           else {
-             for (let i = 1; i <= seed.shareCount; i++) logicalIds.add(`obj-share-${seed.id}-${i}`);
+             for (let i = 1; i <= (seed.shareCount || 0); i++) logicalIds.add(`obj-share-${seed.id}-${i}`);
           }
        }
        if (account?.passphraseId) logicalIds.add(`obj-pass-${account.passphraseId}`);
@@ -106,8 +110,8 @@ function AnalysisSummary() {
     if (hasDescriptorRequirement) logicalIds.add('obj-wallet-descriptor');
     
     // FIX: Only return objects that have an active mapping (not "-- ไม่ใช้ --")
-    return allObjects.filter(obj => {
-       const mapping = state.objectMapping[obj.id];
+    return (allObjects || []).filter(obj => {
+       const mapping = (state.objectMapping || {})[obj.id];
        if (!mapping) return false;
        if (mapping.locationId === 'memory') return true;
        return !!mapping.storagePointId;
@@ -117,11 +121,40 @@ function AnalysisSummary() {
   const simulations = useMemo(() => {
     const results = { normal: [], compromise: [], disaster: [], forget: [] };
 
+    // Get all seeds and passphrases involved in the current strategy
+    const allInvolvedSeedIds = [...new Set((state.spendingMethods || []).flatMap(m => m.keySlots || []).map(accId => {
+      const seed = (state.seeds || []).find(s => (s.accounts || []).some(a => a.id === accId));
+      return seed?.id;
+    }).filter(id => !!id))];
+
+    const allInvolvedPassphraseIds = [...new Set((state.spendingMethods || []).flatMap(m => m.keySlots || []).map(accId => {
+      const account = (state.seeds || []).flatMap(s => s.accounts || []).find(a => a.id === accId);
+      return account?.passphraseId;
+    }).filter(id => !!id))];
+
+    const checkReconstructionPossible = (availableObjects) => {
+      if (!availableObjects) return false;
+      const hasAllSeeds = allInvolvedSeedIds.every(sid => {
+        const seed = (state.seeds || []).find(s => s.id === sid);
+        if (!seed) return false;
+        if (seed.type === 'single') return availableObjects.some(o => o.seedId === sid && o.type === 'mnemonic');
+        const uniqueShares = new Set(availableObjects.filter(o => o.seedId === sid && o.type === 'share').map(s => s.logicalId)).size;
+        return uniqueShares >= (seed.threshold || 0);
+      });
+
+      const hasAllPassphrases = allInvolvedPassphraseIds.every(pid => {
+        return availableObjects.some(o => o.passphraseId === pid);
+      });
+
+      return hasAllSeeds && hasAllPassphrases;
+    };
+
     const getSatisfactionChecker = (method) => (availableObjects) => {
+        if (!method || !method.keySlots || !availableObjects) return false;
         const satisfiedKeys = method.keySlots.filter(accId => {
           if (!accId) return false;
-          const account = state.seeds.flatMap(s => s.accounts).find(a => a.id === accId);
-          const seed = state.seeds.find(s => s.accounts.some(a => a.id === accId));
+          const account = (state.seeds || []).flatMap(s => s.accounts || []).find(a => a.id === accId);
+          const seed = (state.seeds || []).find(s => (s.accounts || []).some(a => a.id === accId));
           if (!account || !seed) return false;
           const hasHW = availableObjects.some(o => o.type === 'hw-wallet' && o.seedId === seed.id);
           const hasPass = account.passphraseId ? availableObjects.some(o => o.passphraseId === account.passphraseId) : true;
@@ -138,28 +171,27 @@ function AnalysisSummary() {
         return satisfiedKeys.length >= method.threshold;
     };
 
-    state.locations.forEach(location => {
+    (state.locations || []).forEach(location => {
       {
-        const compromisedMethodStatuses = state.spendingMethods.map(method => {
+        const compromisedMethodStatuses = (state.spendingMethods || []).map(method => {
         const checkSatisfied = getSatisfactionChecker(method);
         const stolenObjects = [];
         const compromisableObjects = [];
-        const externalObjects = allObjects.filter(obj => {
-            const mapping = state.objectMapping[obj.id];
-            // FIX: Only include objects that are MAPPED and not in this location
+        const externalObjects = (allObjects || []).filter(obj => {
+            const mapping = (state.objectMapping || {})[obj.id];
             if (!mapping || !mapping.locationId) return false;
             return mapping.locationId !== location.id;
         });
         
-        allObjects.forEach(obj => {
-          const mapping = state.objectMapping[obj.id];
+        (allObjects || []).forEach(obj => {
+          const mapping = (state.objectMapping || {})[obj.id];
           if (mapping && mapping.locationId === location.id) {
-            const point = location.storagePoints.find(p => p.id === mapping.storagePointId);
+            const point = (location.storagePoints || []).find(p => p.id === mapping.storagePointId);
             const isHw = obj.type === 'hw-wallet';
             const isLocked = point && point.isLocked;
             if (isLocked || isHw) compromisableObjects.push(obj);
             else stolenObjects.push(obj);
-          } else if (mapping && mapping.locationId.startsWith('Cloud-')) {
+          } else if (mapping && mapping.locationId?.startsWith('Cloud-')) {
             const cloud = (state.clouds || []).find(c => c.id === mapping.locationId);
             if (cloud && !cloud.isLocked) stolenObjects.push(obj);
             else if (cloud && cloud.isLocked) compromisableObjects.push(obj);
@@ -175,7 +207,7 @@ function AnalysisSummary() {
         const thiefCanSpendNow = checkSatisfied(methodStolen);
         
         const userCannotRecoverBase = !checkSatisfied(externalObjects);
-        const thiefStoleRelevantPhysical = methodStolen.some(o => state.objectMapping[o.id]?.locationId === location.id);
+        const thiefStoleRelevantPhysical = methodStolen.some(o => (state.objectMapping || {})[o.id]?.locationId === location.id);
         const userPermanentlyLostFunds = thiefStoleRelevantPhysical && !checkSatisfied([...externalObjects, ...methodCompromisable]);
 
         const isCompromised = thiefCanSpendNow || userPermanentlyLostFunds;
@@ -195,13 +227,12 @@ function AnalysisSummary() {
         else if (userNeedsLockedToSurvive) reason = 'lock-survival';
         else if (thiefHasDescriptor) reason = 'privacy-loss';
 
-        // Attach details for DRILL-DOWN
         const relevant = getRelevantObjectsForMethod(method);
         const details = relevant.map(obj => {
            const isStolenNow = stolenObjects.some(s => s.id === obj.id);
            const isAtRiskHere = compromisableObjects.some(r => r.id === obj.id);
-           const mapping = state.objectMapping[obj.id];
-           const isCloud = mapping?.locationId.startsWith('Cloud-');
+           const mapping = (state.objectMapping || {})[obj.id];
+           const isCloud = mapping?.locationId?.startsWith('Cloud-');
            
            let statusLabel = '✅ ปลอดภัย (อยู่นอกพื้นที่)';
            let icon = '✅';
@@ -243,54 +274,39 @@ function AnalysisSummary() {
         results.compromise.push({ location, statuses: compromisedMethodStatuses, outcome, workingMethods, isRecoverable });
       }
 
-      // --- DISASTER SIMULATION ---
       {
-        const disasterMethodStatuses = state.spendingMethods.map(method => {
+        const disasterMethodStatuses = (state.spendingMethods || []).map(method => {
         const checkSatisfied = getSatisfactionChecker(method);
-        const remainingObjects = allObjects.filter(obj => {
-          const mapping = state.objectMapping[obj.id];
-          // FIX: Only include objects that are MAPPED and not in this location
+        const remainingObjects = (allObjects || []).filter(obj => {
+          const mapping = (state.objectMapping || {})[obj.id];
           if (!mapping || !mapping.locationId) return false;
           return mapping.locationId !== location.id;
         });
 
         const userHasDescriptor = !hasDescriptorRequirement || remainingObjects.some(o => o.type === 'descriptor');
         const canSpendDirectly = checkSatisfied(remainingObjects);
-
-        const involvedSeedIds = [...new Set(method.keySlots.map(accId => {
-            const seed = state.seeds.find(s => s.accounts.some(a => a.id === accId));
-            return seed?.id;
-        }).filter(id => !!id))];
-        
-        const hasAllSeeds = involvedSeedIds.every(sid => {
-            const seed = state.seeds.find(s => s.id === sid);
-            if (!seed) return false;
-            if (seed.type === 'single') return remainingObjects.some(o => o.seedId === sid && o.type === 'mnemonic');
-            const uniqueShares = new Set(remainingObjects.filter(o => o.seedId === sid && o.type === 'share').map(s => s.logicalId)).size;
-            return uniqueShares === seed.shareCount;
-        });
+        const reconstructionPossible = checkReconstructionPossible(remainingObjects);
 
         let status = 'safe';
         if (!canSpendDirectly) status = 'critical';
         else if (canSpendDirectly && !userHasDescriptor) {
-            status = hasAllSeeds ? 'warning' : 'critical';
+            status = reconstructionPossible ? 'warning' : 'critical';
         }
 
         const relevant = getRelevantObjectsForMethod(method);
         const details = relevant.map(obj => {
-            const isAtLocation = state.objectMapping[obj.id]?.locationId === location.id;
+            const isAtLocation = (state.objectMapping || {})[obj.id]?.locationId === location.id;
             const statusLabel = isAtLocation ? '🚨 ถูกทำลาย' : '✅ ปลอดภัย (อยู่นอกพื้นที่)';
             const icon = isAtLocation ? '🚨' : '✅';
             return { ...obj, statusLabel, icon };
         });
 
-        return { methodLabel: method.label, status, hasDescriptor: userHasDescriptor, hasAllSeeds, details };
+        return { methodLabel: method.label, status, hasDescriptor: userHasDescriptor, reconstructionPossible, details };
       });
 
         const workingMethods = disasterMethodStatuses.filter(s => s.status !== 'critical').map(s => s.methodLabel);
         const isRecoverable = workingMethods.length > 0;
         
-        // FIX: Outcome is safe only if at least one method is safe. If all working are warning, outcome is warning.
         const hasSafe = disasterMethodStatuses.some(s => s.status === 'safe');
         const hasWarning = disasterMethodStatuses.some(s => s.status === 'warning');
         const outcome = hasSafe ? 'safe' : (hasWarning ? 'warning' : 'critical');
@@ -299,9 +315,8 @@ function AnalysisSummary() {
       }
     });
 
-    // --- FORGET / MEMORY LOST SIMULATIONS (C.1 - C.4) ---
     const runForgetScenario = (typeFilter) => {
-        return state.spendingMethods.map(method => {
+        return (state.spendingMethods || []).map(method => {
             const checkSatisfied = getSatisfactionChecker(method);
             const availableObjects = allObjects.filter(obj => {
                 const mapping = state.objectMapping[obj.id];
@@ -331,34 +346,23 @@ function AnalysisSummary() {
                 return true;
             });
 
-            const userHasDescriptor = !hasDescriptorRequirement || availableObjects.some(o => o.type === 'descriptor');
+            const userHasDescriptor = !hasDescriptorRequirement || (availableObjects || []).some(o => o.type === 'descriptor');
             const canSpendDirectly = checkSatisfied(availableObjects);
 
-            const involvedSeedIds = [...new Set(method.keySlots.map(accId => {
-                const seed = state.seeds.find(s => s.accounts.some(a => a.id === accId));
-                return seed?.id;
-            }).filter(id => !!id))];
-            
-            const hasAllSeeds = involvedSeedIds.every(sid => {
-                const seed = state.seeds.find(s => s.id === sid);
-                if (!seed) return false;
-                if (seed.type === 'single') return availableObjects.some(o => o.seedId === sid && o.type === 'mnemonic');
-                const uniqueShares = new Set(availableObjects.filter(o => o.seedId === sid && o.type === 'share').map(s => s.logicalId)).size;
-                return uniqueShares === seed.shareCount;
-            });
+            const reconstructionPossible = checkReconstructionPossible(availableObjects);
 
             let status = 'safe';
             if (!canSpendDirectly) status = 'critical';
             else if (canSpendDirectly && !userHasDescriptor) {
-                status = hasAllSeeds ? 'warning' : 'critical';
+                status = reconstructionPossible ? 'warning' : 'critical';
             }
 
             const relevant = getRelevantObjectsForMethod(method);
-            const details = relevant.map(obj => {
-                const mapping = state.objectMapping[obj.id];
+            const details = (relevant || []).map(obj => {
+                const mapping = (state.objectMapping || {})[obj.id];
                 const isInMemory = mapping?.locationId === 'memory';
-                const isCloud = mapping?.locationId.startsWith('Cloud-');
-                let isLost = !availableObjects.some(o => o.id === obj.id);
+                const isCloud = mapping?.locationId?.startsWith('Cloud-');
+                let isLost = !(availableObjects || []).some(o => o.id === obj.id);
                 let isWarning = false;
 
                 if (typeFilter === 'cloud' && isCloud) {
@@ -379,17 +383,17 @@ function AnalysisSummary() {
                 return { ...obj, statusLabel, icon };
             });
 
-            return { methodLabel: method.label, status, details };
+            return { methodLabel: (method || {}).label, status, details };
         });
     };
 
     const aggregateForget = (statuses) => {
-        const workingMethods = statuses.filter(s => s.status !== 'critical').map(s => s.methodLabel);
+        const workingMethods = (statuses || []).filter(s => s.status !== 'critical').map(s => s.methodLabel);
         const isRecoverable = workingMethods.length > 0;
         
         // FIX: Outcome is safe only if at least one method is safe. If all working are warning, outcome is warning.
-        const hasSafe = statuses.some(s => s.status === 'safe');
-        const hasWarning = statuses.some(s => s.status === 'warning');
+        const hasSafe = (statuses || []).some(s => s.status === 'safe');
+        const hasWarning = (statuses || []).some(s => s.status === 'warning');
         const outcome = hasSafe ? 'safe' : (hasWarning ? 'warning' : 'critical');
         
         return { statuses, outcome, workingMethods, isRecoverable };
