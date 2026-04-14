@@ -5,13 +5,25 @@ import KeyLab from './components/KeyLab';
 import StrategyDesigner from './components/StrategyDesigner';
 import AnalysisSummary from './components/AnalysisSummary';
 import StateManagement from './components/StateManagement';
+import TemplatePanel from './components/TemplatePanel';
 import './App.css';
 
 function App() {
+  const [isTemplatePanelOpen, setIsTemplatePanelOpen] = useState(false);
+
   const scrollTo = (id) => {
     const element = document.getElementById(id);
     if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
+      const offset = 100; // 80px header + 20px padding
+      const bodyRect = document.body.getBoundingClientRect().top;
+      const elementRect = element.getBoundingClientRect().top;
+      const elementPosition = elementRect - bodyRect;
+      const offsetPosition = elementPosition - offset;
+
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: 'smooth'
+      });
     }
   };
 
@@ -26,10 +38,17 @@ function App() {
             </div>
             <nav className="main-nav">
               <button className="nav-item" onClick={() => scrollTo('setup')}>
-                1. ตั้งค่าการจัดเก็บ
+                ออกแบบวิธีเก็บรักษา
               </button>
-              <button className="nav-item result-nav-btn" onClick={() => scrollTo('summary')}>
-                2. สรุปผลความเสี่ยง
+              <button className="nav-item" onClick={() => scrollTo('summary')}>
+                ผลวิเคราะห์ความเสี่ยง
+              </button>
+              <button 
+                className="nav-item template-toggle-btn" 
+                onClick={() => setIsTemplatePanelOpen(true)}
+                title="เลือกเทมเพลตมาตรฐาน"
+              >
+                ☰
               </button>
             </nav>
           </div>
@@ -94,6 +113,10 @@ function App() {
             <StateManagement />
           </div>
         </footer>
+        <TemplatePanel 
+          isOpen={isTemplatePanelOpen} 
+          onClose={() => setIsTemplatePanelOpen(false)} 
+        />
       </div>
     </SimulationProvider>
   );

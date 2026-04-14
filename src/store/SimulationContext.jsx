@@ -427,6 +427,9 @@ function reducer(state, action) {
               { ...l, storagePoints: l.storagePoints.map(p => p.id === action.pointId ? { ...p, label: action.label } : p) } : l)
         };
 
+    case 'RESET_TO_DEFAULT':
+        return initialState;
+
     default:
       return state;
   }

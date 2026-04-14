@@ -642,7 +642,7 @@ function AnalysisSummary() {
                       onClick={() => toggleExpand(itemId)}
                     >
                       <div className="res-header">
-                          <strong>วอลเล็ต: {st.methodLabel}</strong>
+                          <strong>{st.methodLabel}</strong>
                           <span className="status-pill">
                               {st.status === 'safe' ? '✅ ปลอดภัย' : st.status === 'warning' ? '⚠️ อันตราย' : '🚨 วิกฤติ'}
                           </span>
@@ -692,7 +692,7 @@ function AnalysisSummary() {
                       onClick={() => toggleExpand(itemId)}
                     >
                       <div className="res-header">
-                          <strong>วอลเล็ต: {st.methodLabel}</strong>
+                          <strong>{st.methodLabel}</strong>
                           <span className="status-pill">
                               {st.isCompromised 
                                 ? (st.reason === 'thief-spend' ? '🚨 เงินถูกขโมย' : '🚨 เงินสูญหาย') 
@@ -747,7 +747,7 @@ function AnalysisSummary() {
                       onClick={() => toggleExpand(itemId)}
                     >
                       <div className="res-header">
-                          <strong>วอลเล็ต: {st.methodLabel}</strong>
+                          <strong>{st.methodLabel}</strong>
                           <span className="status-pill">
                               {st.status === 'safe' ? '✅ ปลอดภัย' : st.status === 'warning' ? '⚠️ มีความเสี่ยง' : '🚨 เงินสูญหาย'}
                           </span>
@@ -800,7 +800,7 @@ function AnalysisSummary() {
                       onClick={() => toggleExpand(itemId)}
                     >
                       <div className="res-header">
-                          <strong>วอลเล็ต: {st.methodLabel}</strong>
+                          <strong>{st.methodLabel}</strong>
                           <span className="status-pill">
                               {st.status === 'safe' ? '✅ ปลอดภัย' : st.status === 'warning' ? '⚠️ มีความเสี่ยง' : '🚨 เงินสูญหาย'}
                           </span>
