@@ -33,7 +33,7 @@ function App() {
         <header className="main-header">
           <div className="container header-content">
             <div className="logo">
-              <span className="bitcoin-icon">₿</span>
+              <span className="bitcoin-icon">🔒</span>
               <h1>Self-Custody <span className="accent-text">Risk Lab</span></h1>
             </div>
             <nav className="main-nav">

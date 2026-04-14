@@ -491,10 +491,15 @@ export const templates = {
         "obj-hw-Seed-A": {
           "locationId": "L-A",
           "storagePointId": "S-A2"
+        },
+        "obj-wallet-descriptor-copy-1": {
+          "locationId": "L-A",
+          "storagePointId": "S-A1"
         }
       },
       "replication": {
-        "obj-pass-P-1": 1
+        "obj-pass-P-1": 1,
+        "obj-wallet-descriptor": 1
       },
       "nextIds": {
         "location": 2,

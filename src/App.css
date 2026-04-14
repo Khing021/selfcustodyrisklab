@@ -1384,8 +1384,20 @@ input:checked + .slider:before {
 
 .safe-text { color: var(--success); }
 .warning-text { color: var(--warning); }
+.orange-text { color: #f59e0b; }
 .critical-text { color: var(--danger); }
 .high-risk-text { color: #ff3b30; text-shadow: 0 0 10px rgba(255, 59, 48, 0.3); }
+.blue-text { color: #3b82f6; text-shadow: 0 0 12px rgba(59, 130, 246, 0.4); }
+.purple-text { color: #a855f7; text-shadow: 0 0 15px rgba(168, 85, 247, 0.5); }
+
+.score-desc {
+    max-width: 600px;
+    margin: 16px auto 0;
+    font-size: 15px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    font-weight: 400;
+}
 
 .sim-card.outcome-danger {
     border: 1.5px solid rgba(255, 171, 0, 0.6) !important;

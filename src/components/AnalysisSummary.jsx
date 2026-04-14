@@ -629,10 +629,65 @@ function AnalysisSummary() {
       simulations.forget.everything.outcome
     ];
 
-    if (normalOutcome === 'critical') return { label: 'วิกฤต (CRITICAL)', colorClass: 'critical-text' };
-    if (threatOutcomes.includes('critical')) return { label: 'มีความเสี่ยงร้ายแรง (FATAL RISK)', colorClass: 'high-risk-text' };
-    if (normalOutcome === 'warning' || threatOutcomes.includes('warning')) return { label: 'ควรระวัง (WARNING)', colorClass: 'warning-text' };
-    return { label: 'ปลอดภัยสูง (HIGH SECURITY)', colorClass: 'safe-text' };
+    const allBSOutcomes = [
+      ...(simulations.blackSwanCompromise?.statuses.map(s => s.outcome) || []),
+      ...(simulations.blackSwanDisaster?.statuses.map(s => s.outcome) || [])
+    ];
+
+    // 1. วิกฤต (CRITICAL)
+    if (normalOutcome === 'critical') {
+      return { 
+        label: 'วิกฤต (CRITICAL)', 
+        colorClass: 'critical-text',
+        desc: 'วอลเล็ตนี้ไม่ปลอดภัยเลยแม้แต่ในสภาวะปกติ ไม่ควรใช้งานโดยเด็ดขาด'
+      };
+    }
+
+    // 2. มีความเสี่ยงร้ายแรง (FATAL RISK)
+    if (threatOutcomes.includes('critical')) {
+      return { 
+        label: 'มีความเสี่ยงร้ายแรง (FATAL RISK)', 
+        colorClass: 'orange-text',
+        desc: 'บางสถานที่หรือความทรงจำของคุณคือจุดอ่อน หากเกิดอะไรขึ้นที่จุดนั้น คุณจะสูญเสียเงินทั้งหมดได้'
+      };
+    }
+
+    // 3. ใช้การได้ (FAIR) 
+    if (normalOutcome === 'warning' || threatOutcomes.includes('warning')) {
+      return { 
+        label: 'ใช้การได้ (FAIR)', 
+        colorClass: 'warning-text',
+        desc: 'ไม่มีจุดใดเลยที่เป็นจุดอ่อนที่อาจทำให้คุณสูญเสียเงิน อย่างมากอาจถูกเปิดเผย wallet descriptor ซึ่งทำให้เสียความเป็นส่วนตัว หรือทำ wallet descriptor หายแล้วต้องรวบรวมคีย์ทั้งหมดเพื่อสร้าง wallet descriptor ขึ้นมาใหม่'
+      };
+    }
+
+    // At this point, basic A, B, C, D are all 'safe'. 
+    // Now check Black Swan for elite tiers.
+
+    // 6. ปลอดภัยกว่านี้ไม่มีอีกแล้ว (ULTRA SECURITY)
+    if (allBSOutcomes.length > 0 && allBSOutcomes.every(o => o === 'safe')) {
+      return { 
+        label: 'ปลอดภัยกว่านี้ไม่มีอีกแล้ว (ULTRA SECURITY)', 
+        colorClass: 'purple-text',
+        desc: 'กูถามจริง? มึงทำไปทำไม? ทำเพื่ออะไร? ห่ะ!?'
+      };
+    }
+
+    // 5. ปลอดภัยมาก (HIGH SECURITY)
+    if (allBSOutcomes.length > 0 && allBSOutcomes.every(o => o !== 'critical')) {
+      return { 
+        label: 'ปลอดภัยมาก (HIGH SECURITY)', 
+        colorClass: 'blue-text',
+        desc: 'บ้าไปแล้ว ต่อให้เกิดเหตุไม่คาดฝันขึ้นหลาย ๆ จุดพร้อมกันก็ทำให้คุณเสียเงินไม่ได้'
+      };
+    }
+
+    // 4. ปลอดภัย (SAFE)
+    return { 
+      label: 'ปลอดภัย (SAFE)', 
+      colorClass: 'safe-text',
+      desc: 'ยอดเยี่ยม คุณไม่สูญเงินหรือเสียความเป็นส่วนตัวเลยแม้ว่าจะเกิดเหตุร้ายขึ้น ณ จุดใดก็ตาม'
+    };
   }, [simulations]);
 
   if (!isConfigValid) {
@@ -747,6 +802,7 @@ function AnalysisSummary() {
         <div className="risk-score">
             <span className="score-label">ภาพรวมความปลอดภัย:</span>
             <span className={`score-value accent-text ${overallStatus.colorClass}`}>{overallStatus.label}</span>
+            <p className="score-desc">{overallStatus.desc}</p>
         </div>
       </header>
 

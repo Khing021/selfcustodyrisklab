@@ -19,9 +19,10 @@ The majority of the source code and logic for this tool was algorithmically gene
 - Define custom geographical and cloud storage locations for your keys.
 - Simulate and analyze vulnerabilities under 4 major categories:
     - **A:** Normal Operation (Cloud dependency, privacy leaks)
-    - **B:** Compromise (Theft, Burglary)
-    - **C:** Disaster (Fire, Flood)
-    - **D:** Memory Loss (Forgetting PINs or Phrases)
+    - **B:** Compromise (Theft, Burglary, including multi-location Black Swan)
+    - **C:** Disaster (Fire, Flood, including multi-location Black Swan)
+    - **D:** Memory Loss (Forgetting PINs, Phrases, or Device Access)
+- **Advanced Black Swan Simulation**: Evaluate what happens when multiple locations or backups fail simultaneously.
 
 ---
 
@@ -42,9 +43,10 @@ The majority of the source code and logic for this tool was algorithmically gene
 - กำหนดตำแหน่งพื้นที่จัดเก็บของวัตถุกุญแจได้อย่างแม่นยำ (สถานที่จริง และ ระบบคลาวด์)
 - ทดสอบความปลอดภัยผ่าน 4 หมวดหมู่หลัก:
     - **A:** สถานะปกติ (การพึ่งพาคลาวด์, การรั่วไหลของข้อมูล)
-    - **B:** โจรกรรม (บ้านถูกงัด, ตู้เซฟโดนขโมย)
-    - **C:** ภัยพิบัติ (อัคคีภัย, ของสูญหาย)
-    - **D:** การลืมข้อมูล (ลืมรหัส PIN, ลืมชุดคำ)
+    - **B:** โจรกรรม (บ้านถูกงัด, ตู้เซฟโดนขโมย รวมถึงเหตุการณ์ Black Swan หลายจุดพร้อมกัน)
+    - **C:** ภัยพิบัติ (อัคคีภัย, ของสูญหาย รวมถึงเหตุการณ์ Black Swan หลายจุดพร้อมกัน)
+    - **D:** การลืมข้อมูล (ลืมรหัส PIN, ลืมชุดคำ หรือลืมวิธีเข้าถึงอุปกรณ์)
+- **ระบบจำลอง Black Swan ขั้นสูง**: ประเมินผลลัพธ์ในกรณีที่สถานที่เก็บของหลายแห่งเกิดปัญหาขึ้นพร้อมกัน
 
 ---
 
