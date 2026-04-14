@@ -119,7 +119,27 @@ function AnalysisSummary() {
   };
 
   const simulations = useMemo(() => {
-    const results = { normal: [], compromise: [], disaster: [], forget: [] };
+    const results = { 
+      normal: [], 
+      compromise: [], 
+      disaster: [], 
+      forget: [],
+      blackSwanCompromise: null,
+      blackSwanDisaster: null
+    };
+
+    const getCombinations = (arr, minSize) => {
+      const combinations = [];
+      const f = (prefix, chars) => {
+        for (let i = 0; i < chars.length; i++) {
+          const nextPrefix = [...prefix, chars[i]];
+          if (nextPrefix.length >= minSize) combinations.push(nextPrefix);
+          f(nextPrefix, chars.slice(i + 1));
+        }
+      };
+      f([], arr);
+      return combinations.sort((a, b) => a.length - b.length);
+    };
 
     // Get all seeds and passphrases involved in the current strategy
     const allInvolvedSeedIds = [...new Set((state.spendingMethods || []).flatMap(m => m.keySlots || []).map(accId => {
@@ -174,146 +194,249 @@ function AnalysisSummary() {
     (state.locations || []).forEach(location => {
       {
         const compromisedMethodStatuses = (state.spendingMethods || []).map(method => {
-        const checkSatisfied = getSatisfactionChecker(method);
-        const stolenObjects = [];
-        const compromisableObjects = [];
-        const externalObjects = (allObjects || []).filter(obj => {
+          const checkSatisfied = getSatisfactionChecker(method);
+          const stolenObjects = [];
+          const compromisableObjects = [];
+          const externalObjects = (allObjects || []).filter(obj => {
+              const mapping = (state.objectMapping || {})[obj.id];
+              if (!mapping || !mapping.locationId) return false;
+              return mapping.locationId !== location.id;
+          });
+          
+          (allObjects || []).forEach(obj => {
             const mapping = (state.objectMapping || {})[obj.id];
-            if (!mapping || !mapping.locationId) return false;
-            return mapping.locationId !== location.id;
-        });
-        
-        (allObjects || []).forEach(obj => {
-          const mapping = (state.objectMapping || {})[obj.id];
-          if (mapping && mapping.locationId === location.id) {
-            const point = (location.storagePoints || []).find(p => p.id === mapping.storagePointId);
-            const isHw = obj.type === 'hw-wallet';
-            const isLocked = point && point.isLocked;
-            if (isLocked || isHw) compromisableObjects.push(obj);
-            else stolenObjects.push(obj);
-          } else if (mapping && mapping.locationId?.startsWith('Cloud-')) {
-            const cloud = (state.clouds || []).find(c => c.id === mapping.locationId);
-            if (cloud && !cloud.isLocked) stolenObjects.push(obj);
-            else if (cloud && cloud.isLocked) compromisableObjects.push(obj);
-          }
-        });
+            if (mapping && mapping.locationId === location.id) {
+              const point = (location.storagePoints || []).find(p => p.id === mapping.storagePointId);
+              const isHw = obj.type === 'hw-wallet';
+              const isLocked = point && point.isLocked;
+              if (isLocked || isHw) compromisableObjects.push(obj);
+              else stolenObjects.push(obj);
+            } else if (mapping && mapping.locationId?.startsWith('Cloud-')) {
+              const cloud = (state.clouds || []).find(c => c.id === mapping.locationId);
+              if (cloud && !cloud.isLocked) stolenObjects.push(obj);
+              else if (cloud && cloud.isLocked) compromisableObjects.push(obj);
+            }
+          });
 
-        const relevantObjects = getRelevantObjectsForMethod(method);
-        const methodInvolvedLogicals = new Set(relevantObjects.map(o => o.logicalId));
+          const relevantObjects = getRelevantObjectsForMethod(method);
+          const methodInvolvedLogicals = new Set(relevantObjects.map(o => o.logicalId));
+          const methodStolen = stolenObjects.filter(o => methodInvolvedLogicals.has(o.logicalId));
+          const methodCompromisable = compromisableObjects.filter(o => methodInvolvedLogicals.has(o.logicalId));
 
-        const methodStolen = stolenObjects.filter(o => methodInvolvedLogicals.has(o.logicalId));
-        const methodCompromisable = compromisableObjects.filter(o => methodInvolvedLogicals.has(o.logicalId));
+          const thiefCanSpendNow = checkSatisfied(methodStolen);
+          const userCannotRecoverBase = !checkSatisfied(externalObjects);
+          const thiefStoleRelevantPhysical = methodStolen.some(o => (state.objectMapping || {})[o.id]?.locationId === location.id);
+          const userPermanentlyLostFunds = thiefStoleRelevantPhysical && !checkSatisfied([...externalObjects, ...methodCompromisable]);
 
-        const thiefCanSpendNow = checkSatisfied(methodStolen);
-        
-        const userCannotRecoverBase = !checkSatisfied(externalObjects);
-        const thiefStoleRelevantPhysical = methodStolen.some(o => (state.objectMapping || {})[o.id]?.locationId === location.id);
-        const userPermanentlyLostFunds = thiefStoleRelevantPhysical && !checkSatisfied([...externalObjects, ...methodCompromisable]);
+          const isCompromised = thiefCanSpendNow || userPermanentlyLostFunds;
+          const thiefHasDescriptor = hasDescriptorRequirement && 
+                                     [...methodStolen, ...methodCompromisable].some(o => o.type === 'descriptor');
 
-        const isCompromised = thiefCanSpendNow || userPermanentlyLostFunds;
+          const thiefCouldSpendIfCrack = !isCompromised && checkSatisfied([...methodStolen, ...methodCompromisable]);
+          const userNeedsLockedToSurvive = !isCompromised && userCannotRecoverBase && checkSatisfied([...externalObjects, ...methodCompromisable]);
+          
+          let isAtRisk = thiefCouldSpendIfCrack || userNeedsLockedToSurvive || thiefHasDescriptor;
+          let reason = thiefCanSpendNow ? 'thief-spend' : (userPermanentlyLostFunds ? 'user-loss' : (thiefCouldSpendIfCrack ? 'crack-risk' : (userNeedsLockedToSurvive ? 'lock-survival' : (thiefHasDescriptor ? 'privacy-loss' : 'none'))));
 
-        const thiefHasDescriptor = hasDescriptorRequirement && 
-                                   [...methodStolen, ...methodCompromisable].some(o => o.type === 'descriptor');
-
-        const thiefCouldSpendIfCrack = !isCompromised && checkSatisfied([...methodStolen, ...methodCompromisable]);
-        const userNeedsLockedToSurvive = !isCompromised && userCannotRecoverBase && checkSatisfied([...externalObjects, ...methodCompromisable]);
-        
-        let isAtRisk = thiefCouldSpendIfCrack || userNeedsLockedToSurvive || thiefHasDescriptor;
-
-        let reason = 'none';
-        if (thiefCanSpendNow) reason = 'thief-spend';
-        else if (userPermanentlyLostFunds) reason = 'user-loss';
-        else if (thiefCouldSpendIfCrack) reason = 'crack-risk';
-        else if (userNeedsLockedToSurvive) reason = 'lock-survival';
-        else if (thiefHasDescriptor) reason = 'privacy-loss';
-
-        const relevant = getRelevantObjectsForMethod(method);
-        const details = relevant.map(obj => {
-           const isStolenNow = stolenObjects.some(s => s.id === obj.id);
-           const isAtRiskHere = compromisableObjects.some(r => r.id === obj.id);
-           const mapping = (state.objectMapping || {})[obj.id];
-           const isCloud = mapping?.locationId?.startsWith('Cloud-');
-           
-           let statusLabel = '✅ ปลอดภัย (อยู่นอกพื้นที่)';
-           let icon = '✅';
-
-           if (isStolenNow) {
-              if (isCloud) {
-                statusLabel = '🚨 เข้าถึงได้โดยแฮ็กเกอร์หรือผู้ให้บริการคลาวด์';
-                icon = '🚨';
-              } else {
-                statusLabel = obj.type === 'hw-wallet' ? '⚠️ ตกอยู่ในมือโจร (ถูกปกป้องด้วย PIN)' : '🚨 ตกอยู่ในมือโจร';
-                icon = isStolenNow && obj.type === 'hw-wallet' ? '⚠️' : '🚨';
-              }
-           } else if (isAtRiskHere) {
-              if (isCloud) {
-                statusLabel = '⚠️ เสี่ยงถูกแกะรหัส (อยู่ในที่ที่แฮ็กเกอร์อาจบุกถึง)';
+          const relevant = getRelevantObjectsForMethod(method);
+          const details = relevant.map(obj => {
+             const isStolenNow = stolenObjects.some(s => s.id === obj.id);
+             const isAtRiskHere = compromisableObjects.some(r => r.id === obj.id);
+             const mapping = (state.objectMapping || {})[obj.id];
+             const isCloud = mapping?.locationId?.startsWith('Cloud-');
+             
+             let statusLabel = '✅ ปลอดภัย (อยู่นอกพื้นที่)';
+             let icon = '✅';
+             if (isStolenNow) {
+                statusLabel = isCloud ? '🚨 เข้าถึงได้โดยแฮ็กเกอร์หรือผู้ให้บริการคลาวด์' : (obj.type === 'hw-wallet' ? '⚠️ ตกอยู่ในมือโจร (ถูกปกป้องด้วย PIN)' : '🚨 ตกอยู่ในมือโจร');
+                icon = (isStolenNow && obj.type === 'hw-wallet' ? '⚠️' : '🚨');
+             } else if (isAtRiskHere) {
+                statusLabel = isCloud ? '⚠️ เสี่ยงถูกแกะรหัส (อยู่ในที่ที่แฮ็กเกอร์อาจบุกถึง)' : '⚠️ เสี่ยงถูกแกะรหัส (อยู่ในจุดที่โจรบุกถึง)';
                 icon = '⚠️';
-              } else {
-                statusLabel = '⚠️ เสี่ยงถูกแกะรหัส (อยู่ในจุดที่โจรบุกถึง)';
-                icon = '⚠️';
-              }
-           }
-           return { ...obj, statusLabel, icon };
+             }
+             return { ...obj, statusLabel, icon };
+          });
+
+          return { methodLabel: method.label, isCompromised, isAtRisk, canSpend: !isCompromised, reason, details };
         });
 
-        const canSpend = !isCompromised;
-        return { methodLabel: method.label, isCompromised, isAtRisk, canSpend, reason, details };
-      });
-
-      const isCompromised = compromisedMethodStatuses.some(s => s.isCompromised);
-      const isAtRisk = compromisedMethodStatuses.some(s => s.isAtRisk);
-      const workingMethods = compromisedMethodStatuses.filter(s => s.canSpend).map(s => s.methodLabel);
-      const isRecoverable = workingMethods.length > 0;
-
-      let outcome = 'safe';
-      if (isCompromised) outcome = 'critical';
-      else if (isAtRisk) outcome = 'warning';
-      else if (!isRecoverable) outcome = 'critical';
+        const isCompromised = compromisedMethodStatuses.some(s => s.isCompromised);
+        const isAtRisk = compromisedMethodStatuses.some(s => s.isAtRisk);
+        const workingMethods = compromisedMethodStatuses.filter(s => s.canSpend).map(s => s.methodLabel);
+        const isRecoverable = workingMethods.length > 0;
+        let outcome = isCompromised ? 'critical' : (isAtRisk ? 'warning' : (isRecoverable ? 'safe' : 'critical'));
 
         results.compromise.push({ location, statuses: compromisedMethodStatuses, outcome, workingMethods, isRecoverable });
       }
 
       {
         const disasterMethodStatuses = (state.spendingMethods || []).map(method => {
-        const checkSatisfied = getSatisfactionChecker(method);
-        const remainingObjects = (allObjects || []).filter(obj => {
-          const mapping = (state.objectMapping || {})[obj.id];
-          if (!mapping || !mapping.locationId) return false;
-          return mapping.locationId !== location.id;
+          const checkSatisfied = getSatisfactionChecker(method);
+          const remainingObjects = (allObjects || []).filter(obj => {
+            const mapping = (state.objectMapping || {})[obj.id];
+            if (!mapping || !mapping.locationId) return false;
+            return mapping.locationId !== location.id;
+          });
+
+          const userHasDescriptor = !hasDescriptorRequirement || remainingObjects.some(o => o.type === 'descriptor');
+          const canSpendDirectly = checkSatisfied(remainingObjects);
+          const reconstructionPossible = checkReconstructionPossible(remainingObjects);
+
+          let status = canSpendDirectly ? (userHasDescriptor ? 'safe' : (reconstructionPossible ? 'warning' : 'critical')) : 'critical';
+
+          const relevant = getRelevantObjectsForMethod(method);
+          const details = relevant.map(obj => {
+              const mapping = (state.objectMapping || {})[obj.id];
+              const isAtLocation = mapping?.locationId === location.id;
+              return { ...obj, statusLabel: isAtLocation ? '🚨 ถูกทำลาย' : '✅ ปลอดภัย (อยู่นอกพื้นที่)', icon: isAtLocation ? '🚨' : '✅' };
+          });
+
+          return { methodLabel: method.label, status, hasDescriptor: userHasDescriptor, reconstructionPossible, details };
         });
-
-        const userHasDescriptor = !hasDescriptorRequirement || remainingObjects.some(o => o.type === 'descriptor');
-        const canSpendDirectly = checkSatisfied(remainingObjects);
-        const reconstructionPossible = checkReconstructionPossible(remainingObjects);
-
-        let status = 'safe';
-        if (!canSpendDirectly) status = 'critical';
-        else if (canSpendDirectly && !userHasDescriptor) {
-            status = reconstructionPossible ? 'warning' : 'critical';
-        }
-
-        const relevant = getRelevantObjectsForMethod(method);
-        const details = relevant.map(obj => {
-            const isAtLocation = (state.objectMapping || {})[obj.id]?.locationId === location.id;
-            const statusLabel = isAtLocation ? '🚨 ถูกทำลาย' : '✅ ปลอดภัย (อยู่นอกพื้นที่)';
-            const icon = isAtLocation ? '🚨' : '✅';
-            return { ...obj, statusLabel, icon };
-        });
-
-        return { methodLabel: method.label, status, hasDescriptor: userHasDescriptor, reconstructionPossible, details };
-      });
 
         const workingMethods = disasterMethodStatuses.filter(s => s.status !== 'critical').map(s => s.methodLabel);
         const isRecoverable = workingMethods.length > 0;
-        
-        const hasSafe = disasterMethodStatuses.some(s => s.status === 'safe');
-        const hasWarning = disasterMethodStatuses.some(s => s.status === 'warning');
-        const outcome = hasSafe ? 'safe' : (hasWarning ? 'warning' : 'critical');
+        const outcome = disasterMethodStatuses.some(s => s.status === 'safe') ? 'safe' : (disasterMethodStatuses.some(s => s.status === 'warning') ? 'warning' : 'critical');
 
         results.disaster.push({ location, statuses: disasterMethodStatuses, outcome, workingMethods, isRecoverable });
       }
     });
+
+    // --- BLACK SWAN SIMULATION ---
+    const locationCombinations = getCombinations(state.locations || [], 2);
+    
+    // Compromise combinations
+    results.blackSwanCompromise = locationCombinations.length > 0 ? (() => {
+      const bscResults = locationCombinations.map(locs => {
+        const combinationLabel = locs.map(l => l.label).join(' & ');
+        const combinationId = locs.map(l => l.id).join('_');
+        
+        const statuses = (state.spendingMethods || []).map(method => {
+          const checkSatisfied = getSatisfactionChecker(method);
+          const stolenObjects = [];
+          const compromisableObjects = [];
+          const locIds = locs.map(l => l.id);
+          
+          const externalObjects = (allObjects || []).filter(obj => {
+            const mapping = (state.objectMapping || {})[obj.id];
+            return mapping && mapping.locationId && !locIds.includes(mapping.locationId);
+          });
+
+          (allObjects || []).forEach(obj => {
+            const mapping = (state.objectMapping || {})[obj.id];
+            if (mapping && locIds.includes(mapping.locationId)) {
+              const loc = locs.find(l => l.id === mapping.locationId);
+              const point = (loc?.storagePoints || []).find(p => p.id === mapping.storagePointId);
+              const isHw = obj.type === 'hw-wallet';
+              const isLocked = point && point.isLocked;
+              if (isLocked || isHw) compromisableObjects.push(obj);
+              else stolenObjects.push(obj);
+            } else if (mapping && mapping.locationId?.startsWith('Cloud-')) {
+              const cloud = (state.clouds || []).find(c => c.id === mapping.locationId);
+              if (cloud && !cloud.isLocked) stolenObjects.push(obj);
+              else if (cloud && cloud.isLocked) compromisableObjects.push(obj);
+            }
+          });
+
+          const relevantObjects = getRelevantObjectsForMethod(method);
+          const methodInvolvedLogicals = new Set(relevantObjects.map(o => o.logicalId));
+          const methodStolen = stolenObjects.filter(o => methodInvolvedLogicals.has(o.logicalId));
+          const methodCompromisable = compromisableObjects.filter(o => methodInvolvedLogicals.has(o.logicalId));
+
+          const thiefCanSpendNow = checkSatisfied(methodStolen);
+          const userCannotRecoverBase = !checkSatisfied(externalObjects);
+          const thiefStoleRelevantPhysical = methodStolen.some(o => {
+            const m = (state.objectMapping || {})[o.id];
+            return m && locIds.includes(m.locationId);
+          });
+          const userPermanentlyLostFunds = thiefStoleRelevantPhysical && !checkSatisfied([...externalObjects, ...methodCompromisable]);
+
+          const isCompromised = thiefCanSpendNow || userPermanentlyLostFunds;
+          const thiefHasDescriptor = hasDescriptorRequirement && 
+                                     [...methodStolen, ...methodCompromisable].some(o => o.type === 'descriptor');
+
+          const thiefCouldSpendIfCrack = !isCompromised && checkSatisfied([...methodStolen, ...methodCompromisable]);
+          const userNeedsLockedToSurvive = !isCompromised && userCannotRecoverBase && checkSatisfied([...externalObjects, ...methodCompromisable]);
+          
+          let isAtRisk = thiefCouldSpendIfCrack || userNeedsLockedToSurvive || thiefHasDescriptor;
+          let reason = thiefCanSpendNow ? 'thief-spend' : (userPermanentlyLostFunds ? 'user-loss' : (thiefCouldSpendIfCrack ? 'crack-risk' : (userNeedsLockedToSurvive ? 'lock-survival' : (thiefHasDescriptor ? 'privacy-loss' : 'none'))));
+
+          const details = relevantObjects.map(obj => {
+            const isStolenNow = stolenObjects.some(s => s.id === obj.id);
+            const isAtRiskHere = compromisableObjects.some(r => r.id === obj.id);
+            const mapping = (state.objectMapping || {})[obj.id];
+            const isCloud = mapping?.locationId?.startsWith('Cloud-');
+            
+            let statusLabel = '✅ ปลอดภัย (อยู่นอกพื้นที่)';
+            let icon = '✅';
+            if (isStolenNow) {
+              statusLabel = isCloud ? '🚨 เข้าถึงได้โดยแฮ็กเกอร์หรือผู้ให้บริการคลาวด์' : (obj.type === 'hw-wallet' ? '⚠️ ตกอยู่ในมือโจร (ถูกปกป้องด้วย PIN)' : '🚨 ตกอยู่ในมือโจร');
+              icon = (isStolenNow && obj.type === 'hw-wallet' ? '⚠️' : '🚨');
+            } else if (isAtRiskHere) {
+              statusLabel = isCloud ? '⚠️ เสี่ยงถูกแกะรหัส (อยู่ในจุดที่แฮ็กเกอร์บุกถึง)' : '⚠️ เสี่ยงถูกแกะรหัส (อยู่ในจุดที่โจรบุกถึง)';
+              icon = '⚠️';
+            }
+            return { ...obj, statusLabel, icon };
+          });
+
+          return { methodLabel: method.label, isCompromised, isAtRisk, canSpend: !isCompromised, reason, details };
+        });
+
+        const isCompromised = statuses.some(s => s.isCompromised);
+        const isAtRisk = statuses.some(s => s.isAtRisk);
+        const workingMethods = statuses.filter(s => s.canSpend).map(s => s.methodLabel);
+        const outcome = isCompromised ? 'critical' : (isAtRisk ? 'warning' : (workingMethods.length > 0 ? 'safe' : 'critical'));
+        
+        return { combinationLabel, combinationId, statuses, outcome, workingMethods, isRecoverable: workingMethods.length > 0 };
+      });
+
+      return {
+        statuses: bscResults,
+        outcome: bscResults.some(r => r.outcome === 'critical') ? 'critical' : (bscResults.some(r => r.outcome === 'warning') ? 'warning' : 'safe')
+      };
+    })() : null;
+
+    // Disaster combinations
+    results.blackSwanDisaster = locationCombinations.length > 0 ? (() => {
+      const bsdResults = locationCombinations.map(locs => {
+        const combinationLabel = locs.map(l => l.label).join(' & ');
+        const combinationId = locs.map(l => l.id).join('_');
+        const locIds = locs.map(l => l.id);
+
+        const statuses = (state.spendingMethods || []).map(method => {
+          const checkSatisfied = getSatisfactionChecker(method);
+          const remainingObjects = (allObjects || []).filter(obj => {
+            const mapping = (state.objectMapping || {})[obj.id];
+            return mapping && mapping.locationId && !locIds.includes(mapping.locationId);
+          });
+
+          const userHasDescriptor = !hasDescriptorRequirement || remainingObjects.some(o => o.type === 'descriptor');
+          const canSpendDirectly = checkSatisfied(remainingObjects);
+          const reconstructionPossible = checkReconstructionPossible(remainingObjects);
+
+          let status = canSpendDirectly ? (userHasDescriptor ? 'safe' : (reconstructionPossible ? 'warning' : 'critical')) : 'critical';
+
+          const relevant = getRelevantObjectsForMethod(method);
+          const details = relevant.map(obj => {
+            const mapping = (state.objectMapping || {})[obj.id];
+            const isDestroyed = mapping && locIds.includes(mapping.locationId);
+            return { ...obj, statusLabel: isDestroyed ? '🚨 ถูกทำลาย' : '✅ ปลอดภัย (อยู่นอกพื้นที่)', icon: isDestroyed ? '🚨' : '✅' };
+          });
+
+          return { methodLabel: method.label, status, hasDescriptor: userHasDescriptor, reconstructionPossible, details };
+        });
+
+        const workingMethods = statuses.filter(s => s.status !== 'critical').map(s => s.methodLabel);
+        const outcome = statuses.some(s => s.status === 'safe') ? 'safe' : (statuses.some(s => s.status === 'warning') ? 'warning' : 'critical');
+        
+        return { combinationLabel, combinationId, statuses, outcome, workingMethods, isRecoverable: workingMethods.length > 0 };
+      });
+
+      return {
+        statuses: bsdResults,
+        outcome: bsdResults.some(r => r.outcome === 'critical') ? 'critical' : (bsdResults.some(r => r.outcome === 'warning') ? 'warning' : 'safe')
+      };
+    })() : null;
 
     const runForgetScenario = (typeFilter) => {
         return (state.spendingMethods || []).map(method => {
@@ -724,6 +847,79 @@ function AnalysisSummary() {
             </div>
           ))}
         </div>
+
+        {simulations.blackSwanCompromise && (() => {
+          const mainId = 'black-swan-B-main';
+          const isMainExpanded = expandedItems.has(mainId);
+          return (
+            <div className={`sim-cards black-swan-zone ${isMainExpanded ? 'expanded' : ''}`}>
+              <div 
+                className={`glass-card sim-card single-full scenario-block outcome-${simulations.blackSwanCompromise.outcome} res-expandable`}
+                onClick={() => toggleExpand(mainId)}
+              >
+                <div className="loc-title black-swan-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span className="expand-icon" style={{ fontSize: '12px' }}>{isMainExpanded ? '▼' : '▶'}</span>
+                    <span>📍 Black Swan</span>
+                  </div>
+                </div>
+                <div className={`outcome-badge ${simulations.blackSwanCompromise.outcome}`}>
+                   {simulations.blackSwanCompromise.outcome === 'safe' ? '✅ ปลอดภัย' : (simulations.blackSwanCompromise.outcome === 'warning' ? '⚠️ มีความเสี่ยง' : '🚨 วิกฤต')}
+                </div>
+                <p className="scenario-intro">หากเกิดการโจรกรรมพร้อมกันมากกว่าหนึ่งสถานที่ โดยกลุ่มโจรที่วางแผนร่วมกัน</p>
+                
+                {isMainExpanded && (
+                  <div className="sim-results animate-slide-down">
+                    {simulations.blackSwanCompromise.statuses.map((sim, i) => {
+                      const comboId = `black-swan-B-${sim.combinationId}`;
+                      const isExpanded = expandedItems.has(comboId);
+                      return (
+                        <div key={i} className={`res-item res-expandable ${sim.outcome} ${isExpanded ? 'expanded' : ''}`} onClick={(e) => { e.stopPropagation(); toggleExpand(comboId); }}>
+                          <div className="res-header">
+                            <strong>บุกรุก: {sim.combinationLabel}</strong>
+                            <span className="status-pill">{sim.outcome === 'critical' ? '🚨 วิกฤต' : (sim.outcome === 'warning' ? '⚠️ เสี่ยง' : '✅ ปลอดภัย')}</span>
+                          </div>
+                          <p className="res-desc">
+                            {sim.outcome === 'critical' ? 'หากทั้งสองจุดถูกบุกรุก เงินจะถูกขโมยหรือสูญเสียการเข้าถึงอย่างถาวร' : (sim.outcome === 'warning' ? 'จุดที่ถูกเลือกมีข้อมูลสำคัญ แต่ยังไม่เพียงพอที่โจรจะขโมยเงินได้ทันทีหากคุณยังมีรหัสป้องกันที่ดี' : 'ปลอดภัย: ปริมาณกุญแจที่ถูกขโมยไปยังไม่เพียงพอที่จะโอนเงินออก')}
+                          </p>
+                          {isExpanded && (
+                            <div className="black-swan-drilldown">
+                              {sim.statuses.map((st, j) => {
+                                const methodId = `${comboId}-method-${j}`;
+                                const isMethodExpanded = expandedItems.has(methodId);
+                                const isOnlyMethod = sim.statuses.length === 1;
+                                const showNestedDetails = isMethodExpanded || isOnlyMethod;
+                                return (
+                                  <div 
+                                    key={j} 
+                                    className={`res-item res-expandable nested ${st.isCompromised ? 'critical' : (st.isAtRisk ? 'warning' : 'safe')} ${showNestedDetails ? 'expanded' : ''}`} 
+                                    onClick={(e) => { 
+                                      if (isOnlyMethod) return; // No need to toggle if only one
+                                      e.stopPropagation(); 
+                                      toggleExpand(methodId); 
+                                    }}
+                                  >
+                                    <div className="res-header">
+                                      <strong>{st.methodLabel}</strong>
+                                      <span className="status-pill">
+                                        {st.isCompromised ? '🚨 วิกฤต' : (st.isAtRisk ? '⚠️ เสี่ยง' : '✅ ปลอดภัย')}
+                                      </span>
+                                    </div>
+                                    {showNestedDetails && renderDetailedList(st.details)}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
       </section>
 
       <section className="simulation-zone">
@@ -771,6 +967,79 @@ function AnalysisSummary() {
             </div>
           ))}
         </div>
+
+        {simulations.blackSwanDisaster && (() => {
+          const mainId = 'black-swan-C-main';
+          const isMainExpanded = expandedItems.has(mainId);
+          return (
+            <div className={`sim-cards black-swan-zone ${isMainExpanded ? 'expanded' : ''}`}>
+              <div 
+                className={`glass-card sim-card single-full scenario-block outcome-${simulations.blackSwanDisaster.outcome} res-expandable`}
+                onClick={() => toggleExpand(mainId)}
+              >
+                <div className="loc-title black-swan-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span className="expand-icon" style={{ fontSize: '12px' }}>{isMainExpanded ? '▼' : '▶'}</span>
+                    <span>🔥 Black Swan</span>
+                  </div>
+                </div>
+                <div className={`outcome-badge ${simulations.blackSwanDisaster.outcome}`}>
+                   {simulations.blackSwanDisaster.outcome === 'safe' ? '✅ กู้คืนได้' : (simulations.blackSwanDisaster.outcome === 'warning' ? '⚠️ มีความเสี่ยง' : '🚨 เงินสูญหาย')}
+                </div>
+                <p className="scenario-intro">หากเกิดภัยพิบัติหรือเหตุการณ์ไม่คาดฝันพร้อมกันมากกว่าหนึ่งสถานที่</p>
+                
+                {isMainExpanded && (
+                  <div className="sim-results animate-slide-down">
+                    {simulations.blackSwanDisaster.statuses.map((sim, i) => {
+                      const comboId = `black-swan-C-${sim.combinationId}`;
+                      const isExpanded = expandedItems.has(comboId);
+                      return (
+                        <div key={i} className={`res-item res-expandable ${sim.outcome} ${isExpanded ? 'expanded' : ''}`} onClick={(e) => { e.stopPropagation(); toggleExpand(comboId); }}>
+                          <div className="res-header">
+                            <strong>ภัยพิบัติ: {sim.combinationLabel}</strong>
+                            <span className="status-pill">{sim.outcome === 'critical' ? '🚨 สูญหาย' : (sim.outcome === 'warning' ? '⚠️ เสี่ยง' : '✅ ปลอดภัย')}</span>
+                          </div>
+                          <p className="res-desc">
+                            {sim.outcome === 'critical' ? 'ข้อมูลในจุดที่เลือกสูญหายหมด และข้อมูลที่เหลืออยู่ไม่เพียงพอที่จะกู้คืนเงินได้' : (sim.outcome === 'warning' ? 'คุณสูญเสีย Wallet Descriptor และกุญแจบางส่วน แต่ยังเหลือเมล็ดพันธุ์เพียงพอที่จะสร้างกระเป๋าขึ้นมาใหม่ได้' : 'เครื่องมือการกู้คืนของคุณยังกระจายตัวอยู่ในจุดอื่นๆ มากพอที่จะกู้เงินคืนได้')}
+                          </p>
+                          {isExpanded && (
+                            <div className="black-swan-drilldown">
+                              {sim.statuses.map((st, j) => {
+                                const methodId = `${comboId}-method-${j}`;
+                                const isMethodExpanded = expandedItems.has(methodId);
+                                const isOnlyMethod = sim.statuses.length === 1;
+                                const showNestedDetails = isMethodExpanded || isOnlyMethod;
+                                return (
+                                  <div 
+                                    key={j} 
+                                    className={`res-item res-expandable nested ${st.status} ${showNestedDetails ? 'expanded' : ''}`} 
+                                    onClick={(e) => { 
+                                      if (isOnlyMethod) return; // No need to toggle if only one
+                                      e.stopPropagation(); 
+                                      toggleExpand(methodId); 
+                                    }}
+                                  >
+                                    <div className="res-header">
+                                      <strong>{st.methodLabel}</strong>
+                                      <span className="status-pill">
+                                        {st.status === 'safe' ? '✅ ปลอดภัย' : st.status === 'warning' ? '⚠️ มีความเสี่ยง' : '🚨 เงินสูญหาย'}
+                                      </span>
+                                    </div>
+                                    {showNestedDetails && renderDetailedList(st.details)}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
       </section>
 
       <section className="simulation-zone">

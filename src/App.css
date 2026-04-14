@@ -1097,8 +1097,19 @@ input:checked + .slider:before {
    text-transform: uppercase;
 }
 .simulation-zone h3 {
-   margin-bottom: 20px;
-   font-size: 20px;
+    margin: 60px 0 24px 0;
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--text-primary);
+    position: relative;
+    padding-top: 40px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.simulation-zone:first-of-type h3 {
+    border-top: none;
+    padding-top: 0;
+    margin-top: 40px;
 }
 .sim-cards {
    display: grid;
@@ -1381,4 +1392,74 @@ input:checked + .slider:before {
 }
 .sim-card.outcome-high-risk {
     border: 1.5px solid rgba(255, 59, 48, 0.6) !important;
+}
+
+/* --- Black Swan Specific Styles --- */
+.black-swan-zone {
+    margin-top: 40px;
+    padding-top: 32px;
+    position: relative;
+}
+
+.black-swan-zone::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 33%;
+    border-top: 1px dashed var(--border-color);
+}
+
+.black-swan-drilldown {
+    margin-top: 16px;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-md);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.res-item.nested {
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.02);
+    padding: 12px 16px;
+    font-size: 14px;
+}
+
+.res-item.nested .res-header strong {
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.res-item.nested:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.res-item.nested.critical { border-left: 3px solid var(--danger); }
+.res-item.nested.warning { border-left: 3px solid var(--warning); }
+.res-item.nested.safe { border-left: 3px solid var(--success); }
+
+.black-swan-header {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    gap: 12px;
+}
+
+.expand-icon {
+    font-size: 14px;
+    color: var(--text-dim);
+    transition: var(--transition);
+}
+
+.res-expandable:hover .expand-icon {
+    color: var(--accent-gold);
+}
+
+.black-swan-zone.expanded .scenario-intro {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding-bottom: 16px;
+    margin-bottom: 20px;
 }
