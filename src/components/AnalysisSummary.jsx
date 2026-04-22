@@ -248,7 +248,7 @@ function AnalysisSummary() {
                                         className={`det-status ${inst.icon === '✅' ? 'safe' : inst.icon === '⚠️' ? 'warning' : 'danger'}`} 
                                         title={title}
                                     >
-                                        {inst.statusLabel}
+                                        {RiskEngine.getStatusThai(inst.statusLabel)}
                                     </span>
                                 )}
                             </>
@@ -277,7 +277,7 @@ function AnalysisSummary() {
                                 className={`det-status ${inst.icon === '✅' ? 'safe' : inst.icon === '⚠️' ? 'warning' : 'danger'}`} 
                                 title={title}
                             >
-                                {inst.statusLabel}
+                                {RiskEngine.getStatusThai(inst.statusLabel)}
                             </span>
                         </div>
                     );
@@ -332,6 +332,8 @@ function AnalysisSummary() {
                                   : st.reason === 'exposed-privacy'
                                   ? 'Wallet Descriptor ถูกเก็บไว้บนคลาวด์โดยไม่ได้เข้ารหัส ทำให้อาจมีบุคคลภายนอกสามารถเฝ้าจับตาความเคลื่อนไหวของเงินเราได้ และรู้ว่าเรามีเงินอยู่เท่าไร'
                                   : st.reason === 'exposed-partial'
+                                  ? 'พบความลับบางส่วนถูกเก็บไว้บนคลาวด์โดยไม่ได้เข้ารหัสลับ (Plaintext) แม้จะยังไม่เพียงพอให้โอนเงินออกได้ทันที แต่ถือว่าความปลอดภัยของระบบลดลงอย่างมาก'
+                                  : st.reason === 'exposed-crack-risk'
                                   ? 'ข้อมูลกุญแจสำคัญถูกเก็บไว้บนคลาวด์ถึงแม้จะมีการเข้ารหัสไว้ แต่ถือว่ามีความเสี่ยงหากโจรสามารถเดารหัสหรือเจาะระบบคลาวด์ได้'
                                   : 'ความลับบางส่วนถูกเก็บไว้บนคลาวด์โดยไม่ได้เข้ารหัสไว้ แม้จะโอนเงินไม่ได้ทันทีแต่ถือว่าข้อมูลรั่วไหลแล้ว')
                               : 'ความลับทั้งหมดถูกเก็บไว้นอกคลาวด์ หรือแม้มีบางส่วนอยู่บนคลาวด์ก็อยู่ในสภาพเข้ารหัส'}

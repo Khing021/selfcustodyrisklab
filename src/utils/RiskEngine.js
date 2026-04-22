@@ -29,6 +29,7 @@ export class RiskEngine {
     }
 
     if (scenario === 'B_COMPROMISE') {
+      const baseline = this.evaluateObject(obj, 'A_NORMAL');
       const tLocs = params.locIds || [];
       const isAtTarget = tLocs.includes(ctx.locId);
       
@@ -40,33 +41,35 @@ export class RiskEngine {
         if (isHW && isLocked) return 'CompromisableWithPIN';
         if (isHW && !isLocked) return 'CompromisedWithPIN';
       }
-      return 'Safe';
+      return baseline;
     }
 
     if (scenario === 'C_DISASTER') {
+      const baseline = this.evaluateObject(obj, 'A_NORMAL');
       const tLocs = params.locIds || [];
       if (tLocs.includes(ctx.locId)) return 'Lost';
-      return 'Available';
+      return baseline === 'Safe' ? 'Available' : baseline;
     }
 
     if (scenario === 'D_FORGET') {
+      const baseline = this.evaluateObject(obj, 'A_NORMAL');
       const type = params.type;
       let ld1 = ctx.isMemory && ['mnemonic', 'share', 'passphrase'].includes(obj.type);
       let ld2 = obj.type === 'hw-wallet';
       let ld3 = ctx.isCloud && ctx.cloudInfo?.isLocked;
       let rec3 = ctx.isCloud && !ctx.cloudInfo?.isLocked;
 
-      if (type === 'secrets') return ld1 ? 'Lost' : 'Available';
-      if (type === 'pin') return ld2 ? 'Lost' : 'Available';
+      if (type === 'secrets') return ld1 ? 'Lost' : (baseline === 'Safe' ? 'Available' : baseline);
+      if (type === 'pin') return ld2 ? 'Lost' : (baseline === 'Safe' ? 'Available' : baseline);
       if (type === 'cloud') {
          if (ld3) return 'Lost';
          if (rec3) return 'Recoverable';
-         return 'Available';
+         return baseline === 'Safe' ? 'Available' : baseline;
       }
       if (type === 'everything') {
          if (ld1 || ld2 || ld3) return 'Lost';
          if (rec3) return 'Recoverable';
-         return 'Available';
+         return baseline === 'Safe' ? 'Available' : baseline;
       }
     }
     return 'Unknown';
@@ -139,8 +142,8 @@ export class RiskEngine {
   }
 
   evaluateMethod(method, scenario, params, hasDescReq) {
-    const isDescAvail = !hasDescReq || this.hasDescriptor(scenario, params, ['Safe', 'Available']);
-    const isDescRecov = !hasDescReq || this.hasDescriptor(scenario, params, ['Safe', 'Available', 'Recoverable', 'Compromisable', 'CompromisableWithPIN', 'Expostable']);
+    const isDescAvail = !hasDescReq || this.hasDescriptor(scenario, params, ['Safe', 'Available', 'Exposed']);
+    const isDescRecov = !hasDescReq || this.hasDescriptor(scenario, params, ['Safe', 'Available', 'Recoverable', 'Compromisable', 'CompromisableWithPIN', 'Expostable', 'Exposed']);
     
     // For spending, if desc is NOT required, the thief effectively "has" everything they need on the desc front.
     const thiefHasExpDesc = !hasDescReq || this.hasDescriptor(scenario, params, ['Exposed']);
@@ -149,9 +152,9 @@ export class RiskEngine {
     // For privacy, if desc is NOT required (doesn't exist), it cannot leak privacy.
     const descPrivacyLeaked = hasDescReq && this.hasDescriptor(scenario, params, ['Exposed']);
     // For privacy in Scenario B, we only care about what the thief gets DURING the burglary.
-    // Global exposure is handled in A_NORMAL.
-    const userHasExpDescForPrivacyB = false; 
-    const userHasExpExpostDescForPrivacyB = false;
+    // However, if it's already leaked on the cloud (Scenario A), we factor that in.
+    const userHasExpDescForPrivacyB = hasDescReq && this.hasDescriptor('A_NORMAL', {}, ['Exposed']); 
+    const userHasExpExpostDescForPrivacyB = hasDescReq && this.hasDescriptor('A_NORMAL', {}, ['Exposed', 'Expostable']);
 
     if (scenario === 'A_NORMAL') {
       const expSpend = this.checkSatisfiedWithStatuses(scenario, params, method, ['Exposed']);
@@ -159,9 +162,16 @@ export class RiskEngine {
       const hasSafe = this.checkSatisfiedWithStatuses(scenario, params, method, ['Safe']);
       const privacyLeaked = descPrivacyLeaked || this.checkSatisfiedWithStatuses(scenario, params, method, ['Exposed']);
       
+      const relevantObjects = this.getRelevantObjects(method);
+      const anySecretExposed = relevantObjects.some(o => 
+        ['mnemonic', 'share', 'passphrase'].includes(o.type) && 
+        this.getObjStatus(o.id, scenario, params) === 'Exposed'
+      );
+
       let reason = 'safe';
       if (expSpend && thiefHasExpDesc) reason = 'exposed-spend';
-      else if (expExpostSpend && thiefHasExpExpostDesc) reason = 'exposed-partial';
+      else if (anySecretExposed) reason = 'exposed-partial';
+      else if (expExpostSpend && thiefHasExpExpostDesc) reason = 'exposed-crack-risk';
       else if (privacyLeaked) reason = 'exposed-privacy';
       else if (!hasSafe) reason = 'cloud-dependency';
 
@@ -221,6 +231,24 @@ export class RiskEngine {
     if (['Expostable', 'Compromisable', 'CompromisableWithPIN', 'Recoverable'].includes(objStatus)) return { icon: '⚠️', type: 'warning' };
     if (['Exposed', 'Compromised', 'CompromisedWithPIN', 'Lost'].includes(objStatus)) return { icon: '🚨', type: 'danger' };
     return { icon: '❓', type: 'danger' };
+  }
+
+  static getStatusThai(status) {
+    const mapping = {
+      'Safe': 'ปลอดภัย',
+      'Available': 'เข้าถึงได้',
+      'Expostable': 'อาจจะรั่วไหล',
+      'Compromisable': 'อาจจะถูกขโมย',
+      'CompromisableWithPIN': 'อาจจะถูกขโมย (มีรหัส PIN)',
+      'Recoverable': 'สามารถกู้คืนได้',
+      'Exposed': 'รั่วไหล',
+      'Compromised': 'ถูกขโมย',
+      'CompromisedWithPIN': 'ถูกขโมย (มีรหัส PIN)',
+      'Lost': 'สูญหาย',
+      'Ignored': 'ไม่นำมาคำนวณ',
+      'Unknown': 'ไม่ทราบสถานะ'
+    };
+    return mapping[status] || status;
   }
 
   // L5: Scenario Aggregation
