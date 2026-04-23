@@ -212,17 +212,20 @@ export class RiskEngine {
     }
 
     if (scenario === 'C_DISASTER') {
-      const available = this.checkSatisfiedWithStatuses(scenario, params, method, ['Available']) && isDescAvail;
-      return { status: available ? 'safe' : 'critical' };
+      const keysAvailable = this.checkSatisfiedWithStatuses(scenario, params, method, ['Available']);
+      if (keysAvailable && isDescAvail) return { status: 'safe' };
+      if (keysAvailable && !isDescAvail) return { status: 'warning' };
+      return { status: 'critical' };
     }
 
     if (scenario === 'D_FORGET') {
-      const available = this.checkSatisfiedWithStatuses(scenario, params, method, ['Available']) && isDescAvail;
-      const recoverable = this.checkSatisfiedWithStatuses(scenario, params, method, ['Available', 'Recoverable']) && isDescRecov;
-      let status = 'critical';
-      if (available) status = 'safe';
-      else if (recoverable) status = 'warning';
-      return { status };
+      const keysAvailable = this.checkSatisfiedWithStatuses(scenario, params, method, ['Available']);
+      const keysRecoverable = this.checkSatisfiedWithStatuses(scenario, params, method, ['Available', 'Recoverable']);
+      
+      if (keysAvailable && isDescAvail) return { status: 'safe' };
+      if (keysAvailable && !isDescAvail) return { status: 'warning' };
+      if (keysRecoverable) return { status: 'warning' };
+      return { status: 'critical' };
     }
   }
 

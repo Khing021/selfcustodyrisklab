@@ -109,6 +109,7 @@ function App() {
                     View on GitHub
                 </a>
             </div>
+            <p className="tip-text">tip me via ⚡ at zap@khing021.com</p>
             <p className="disclaimer-text">© 2026 Bitcoin Self-Custody Risk Lab - Free & Opensource. Built for educational purposes.</p>
             <StateManagement />
           </div>

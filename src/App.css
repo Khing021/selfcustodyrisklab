@@ -172,6 +172,14 @@
   border-color: var(--accent-gold);
 }
 
+.tip-text {
+  font-size: 13px;
+  color: var(--accent-gold);
+  margin-bottom: 8px;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
 .disclaimer-text {
   font-size: 12px;
   opacity: 0.7;
@@ -457,6 +465,59 @@ input:checked+.slider:before {
 .point-delete-btn:hover {
   color: var(--danger);
   transform: scale(1.1);
+}
+
+/* --- Seed Configuration Styles --- */
+.seed-config {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+  background: rgba(0, 0, 0, 0.1);
+  padding: 16px;
+  border-radius: var(--radius-md);
+}
+
+.config-row, .param, .param-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.config-row label, .param label {
+  width: 180px;
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.type-select, 
+.multi-params input,
+.param-item input {
+  height: 38px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: 8px;
+  padding: 0 12px;
+  font-size: 14px;
+  flex: 1;
+  max-width: 250px;
+  transition: var(--transition);
+}
+
+.type-select:focus,
+.multi-params input:focus {
+  outline: none;
+  border-color: var(--accent-gold);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.multi-params {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 /* --- Wallet Tree Styles --- */
@@ -988,10 +1049,7 @@ input:checked+.slider:before {
   font-size: 14px;
 }
 
-.type-select {
-  font-size: 13px;
-  padding: 4px 8px;
-}
+
 
 /* --- StrategyDesigner Styles --- */
 .strategy-designer {

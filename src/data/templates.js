@@ -1,6 +1,77 @@
 export const templates = {
   template1: {
-    label: "1. Simple Single Sig",
+    label: "1. Idiot who store seed phrase on unencrypted cloud",
+    state: {
+      "locations": [
+        {
+          "id": "L-A",
+          "label": "บ้าน",
+          "storagePoints": [
+            {
+              "id": "S-A1",
+              "label": "ห้องนอน (A1)",
+              "isLocked": false
+            }
+          ]
+        }
+      ],
+      "clouds": [
+        {
+          "id": "Cloud-A",
+          "label": "Google Drive",
+          "isLocked": false
+        }
+      ],
+      "seeds": [
+        {
+          "id": "Seed-A",
+          "label": "Seed A",
+          "type": "single",
+          "threshold": 1,
+          "shareCount": 1,
+          "passphrases": [],
+          "accounts": [
+            {
+              "id": "Acc-A1",
+              "label": "Standard - Single Sig #1",
+              "type": "single-sig",
+              "passphraseId": null
+            }
+          ]
+        }
+      ],
+      "spendingMethods": [
+        {
+          "id": "Method-1",
+          "label": "Daily Spending",
+          "type": "single-sig",
+          "threshold": 1,
+          "keySlots": [
+            "Acc-A1"
+          ]
+        }
+      ],
+      "objectMapping": {
+        "obj-hw-Seed-A": {
+          "locationId": "L-A",
+          "storagePointId": "S-A1"
+        },
+        "obj-mnemonic-Seed-A": {
+          "locationId": "Cloud-A",
+          "storagePointId": "Cloud-A"
+        }
+      },
+      "replication": {},
+      "nextIds": {
+        "location": 1,
+        "cloud": 1,
+        "seed": 1,
+        "method": 2
+      }
+    }
+  },
+  template2: {
+    label: "2. Simple Single Sig",
     state: {
       "locations": [
         {
@@ -73,8 +144,8 @@ export const templates = {
       }
     }
   },
-  template2: {
-    label: "2. Single Sig + Passphrase",
+  template3: {
+    label: "3. Single Sig + Passphrase",
     state: {
       "locations": [
         {
@@ -173,8 +244,122 @@ export const templates = {
       }
     }
   },
-  template3: {
-    label: "3. Multisig 2-of-3",
+  template4: {
+    label: "4. Shamir Backup 2-of-3 Single Sig",
+    state: {
+      "locations": [
+        {
+          "id": "L-A",
+          "label": "บ้าน",
+          "storagePoints": [
+            {
+              "id": "S-A1",
+              "label": "ตู้เซฟ",
+              "isLocked": true
+            },
+            {
+              "id": "S-A2",
+              "label": "โต๊ะคอม - ลิ้นชัก",
+              "isLocked": false
+            }
+          ]
+        },
+        {
+          "id": "L-B",
+          "label": "บ้านแฟนคนที่ 1",
+          "storagePoints": [
+            {
+              "id": "S-B1",
+              "label": "ตู้เสื้อผ้า",
+              "isLocked": false
+            }
+          ]
+        },
+        {
+          "id": "L-C",
+          "label": "บ้านแฟนคนที่ 2",
+          "storagePoints": [
+            {
+              "id": "S-C1",
+              "label": "ใต้เตียง",
+              "isLocked": false
+            }
+          ]
+        }
+      ],
+      "clouds": [],
+      "seeds": [
+        {
+          "id": "Seed-A",
+          "label": "Seed A",
+          "type": "multi",
+          "threshold": 2,
+          "shareCount": 3,
+          "passphrases": [],
+          "accounts": [
+            {
+              "id": "Acc-A1",
+              "label": "Main Savings",
+              "type": "single-sig",
+              "passphraseId": null
+            }
+          ]
+        }
+      ],
+      "spendingMethods": [
+        {
+          "id": "Method-1",
+          "label": "Main Spending",
+          "type": "single-sig",
+          "threshold": 1,
+          "keySlots": [
+            "Acc-A1"
+          ]
+        }
+      ],
+      "objectMapping": {
+        "obj-mnemonic-Seed-A": {
+          "locationId": "L-A",
+          "storagePointId": "S-A1"
+        },
+        "obj-hw-Acc-A1": {
+          "locationId": "L-A",
+          "storagePointId": "S-A2"
+        },
+        "obj-hw-Seed-A": {
+          "locationId": "L-A",
+          "storagePointId": "S-A2"
+        },
+        "obj-share-Seed-A-1": {
+          "locationId": "L-A",
+          "storagePointId": "S-A1"
+        },
+        "obj-share-Seed-A-2": {
+          "locationId": "L-A",
+          "storagePointId": "S-A1"
+        },
+        "obj-share-Seed-A-2-copy-1": {
+          "locationId": "L-B",
+          "storagePointId": "S-B1"
+        },
+        "obj-share-Seed-A-3": {
+          "locationId": "L-C",
+          "storagePointId": "S-C1"
+        }
+      },
+      "replication": {
+        "obj-share-Seed-A-2": 1
+      },
+      "nextIds": {
+        "location": 3,
+        "cloud": 0,
+        "seed": 1,
+        "method": 1
+      }
+    }
+  },
+  template5: {
+    label: "5. Multisig 2-of-3",
     state: {
       "locations": [
         {
@@ -333,8 +518,8 @@ export const templates = {
       }
     }
   },
-  template4: {
-    label: "4. Dual Spending Paths (Daily + Recovery)",
+  template6: {
+    label: "6. Dual Spending Paths (Daily + Recovery)",
     state: {
       "locations": [
         {

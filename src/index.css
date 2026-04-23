@@ -51,6 +51,11 @@ input, select {
   transition: var(--transition);
 }
 
+select option {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
 input:focus {
   border-color: var(--accent-gold);
   box-shadow: 0 0 0 2px var(--accent-gold-glow);
